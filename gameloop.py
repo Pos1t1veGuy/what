@@ -31,9 +31,12 @@ class Area: # main window
 		if bg_always_on_top:
 			self.root.wm_attributes("-topmost", 1)
 
-		for timeline in self.timelines:
-			for obj in timeline.objects:
+		for i, timeline in enumerate(self.timelines):
+			for j, obj in enumerate(timeline.objects):
 				obj.set_window( Toplevel(self.root) ) # creates child window for every Window object
+				obj.name = j
+				
+			timeline.name = i
 
 		keyboard_thread = th(target=self.check_keyboard, daemon=True)
 		keyboard_thread.start()
@@ -78,6 +81,7 @@ class TimeLine: # it is a scene where contain child windows, you may use several
 	def __init__(self, objects: list, bg_alpha: float = 1, wait_time: int = 0, alive_time: int = -1):
 		# objects: list of Window objects
 		# wait_time: delay time before start in seconds
+		self.name = 'independent_timeline'
 		self.objects = objects
 		self.bg_alpha = bg_alpha
 		self.alive_time = 0
@@ -92,7 +96,7 @@ class TimeLine: # it is a scene where contain child windows, you may use several
 		if self.alive_time >= self.wait_time:
 			results = []
 			for obj in self.objects:
-				is_dead = obj.update( int(self.alive_time), fps )
+				is_dead = obj.update(self, fps)
 				results.append(not is_dead)
 
 			return all(results)
