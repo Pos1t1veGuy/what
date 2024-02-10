@@ -6,9 +6,6 @@ def linear_x(distance: int, k: int = 1, b: int = 0, step: int = 1, start_at: lis
 def linear_y(distance: int, k: int = 1, b: int = 0, step: int = 1, start_at: list = [0, 0]) -> list: # y = kx + b
     return [ (start_at[0] + int(k*x + b), start_at[1] + x) for x in range(0, distance, step) ]
 
-# def degree_linear(distance: int, degree: int, b: int = 0):
-#     return [ (x, int(tan(radians(degree))*x + b)) for x in range(distance) ]
-
 def quadratic_x(distance: int, a: int = 1, b: int = 0, c: int = 1, step: int = 1, start_at: list = [0, 0]) -> list:
     a = a / distance**2
     return [ (start_at[0] + x, start_at[1] + int(a * (x - distance/2)**2 + c)) for x in range(0, distance, step) ]
@@ -16,31 +13,6 @@ def quadratic_x(distance: int, a: int = 1, b: int = 0, c: int = 1, step: int = 1
 def quadratic_y(distance: int, a: int = 1, b: int = 0, c: int = 1, step: int = 1, start_at: list = [0, 0]) -> list:
     a = a / distance**2
     return [ (start_at[0] + int(a * (x - distance/2)**2 + c), start_at[1] + x) for x in range(0, distance, step) ]
-
-# class Parabola:
-#     class fixed_speed: # speed by fixed step
-#         def x(distance: int, a: int = 1, c: int = 1, step: int = 1, start_at: list = [0, 0]):
-#             a = a / distance**2
-#             return [ (start_at[0] + x, start_at[1] + int(a * (x - distance/2)**2 + c)) for x in range(0, distance, step) ]
-
-#         def y(distance: int, a: int = 1, c: int = 1, step: int = 1, start_at: list = [0, 0]):
-#             a = a / distance**2
-#             return [ (start_at[0] + int(a * (x - distance/2)**2 + c), start_at[1] + x) for x in range(0, distance, step) ]
-
-#     class dimanic_speed: # speed by parabola ( y = ax**2 + c ) derivative function
-#         def x(distance: int, a: int = 1, c: int = 1, start_at: list = [0, 0], speed: int = 1):
-#             a = a / distance**2
-#             result = [start_at]
-#             while 1:
-#                 x, y = result[-1]
-#                 deriv = -1 / 2*a*x
-#                 result.append([int(x + deriv + speed), int(a * x**2 + c)])
-
-#                 print(x + deriv + speed)
-#                 if abs( result[0][0] - result[-1][0] ) >= distance:
-#                     break
-
-#             return result
 
 
 class Movement:
