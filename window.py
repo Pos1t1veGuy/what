@@ -1,24 +1,30 @@
+from typing import *
+
 import os, time
 import pyautogui as pag
 
+from tkinter import Tk, Toplevel
 from PIL import Image, ImageTk
 from math import floor, ceil
 from tkinter import Label
 
 
 class Window: # it is child window
-	def __init__(self, movements: list, size: list, cycle: bool = False,
-		always_on_top: bool = True, show_frame: bool = False, alpha: float = 1.0, transparent_color = None, bg_color = "black",
+	def __init__(self, movements: Union[ List[Tuple[int, int]], list ], size: List[int], cycle: bool = False,
+		always_on_top: bool = True, show_frame: bool = False, alpha: float = 1.0, transparent_color: str = None, bg_color: str = "black",
 		image_path: str = '', image_size: list = [], image_angle: int = 0,
-		spawn_time: int = 0, alive_time: int = None, rhythm: int = -1, on_rhythm: list = []):
+		spawn_time: int = 0, alive_time: int = None, rhythm: int = -1, on_rhythm: list = [],
+		hitbox: list = [], click_button: str = '<Button-1>', on_mouse_in_hitbox: list = [], on_click: list = [], on_mouse_hitbox_click: list = []):
 		'''
-		movements: list of the positions, it change position after every screen update
+		movements: list of the positions or Command object, it change position after every screen update
 		cycle: it may move endlessly
 		transparent_color: everywhere in window this color will be transparent
 		spawn_time: time in seconds when window should spawn after connected timeline initialize
 		alive_time: time in seconds how long it will be alive after spawn
 		rhythm: time in seconds how many seconds it will execute on_rhythm commands
 		on_rhythm: list of Command objects
+		hitbox: list of 2 positions, it will execute Command at kwarg on_mouse_in_hitbox if you indicate this kwarg
+		click_button: string button id that tkinter will bind in root.bind, after click it will do Command in on_click, if you indicate kwarg hitbox it will works with on_mouse_hitbox_click too
 		'''
 
 		self.name = 'independent_child_window'
@@ -40,6 +46,11 @@ class Window: # it is child window
 		self.image_angle = 0
 		self.default_image_angle = image_angle
 
+		self.hitbox = hitbox
+		self.on_hitbox = on_mouse_in_hitbox
+		self.on_mouse_hitbox = on_mouse_hitbox_click
+		self.on_click = on_click
+
 		self.screen_width = None
 		self.screen_height = None
 
@@ -47,6 +58,7 @@ class Window: # it is child window
 		self.show_frame = show_frame
 		self.transparent_color = transparent_color
 		self.bg_color = bg_color
+		self.click_button = click_button
 
 		self.dead = False
 		self.movement_index = 0
@@ -111,7 +123,7 @@ You must:
 				raise AttributeError(f'{self.adress}Child window "Window.root" did not configured')
 		return True
 
-	def set_window(self, root):
+	def set_window(self, root: Union[Tk, Toplevel]):
 		self.root = root
 		self.root.geometry(f"{self.default_size[0]}x{self.default_size[1]}")
 
@@ -136,8 +148,10 @@ You must:
 		if self.transparent_color:
 			self.root.wm_attributes("-transparentcolor", transparent_color)
 
-		self.root.title("Child Window")
+		self.root.bind(self.click_button, self.click_events)
+		self.root.bind("<Motion>", self.mouse_events)
 
+		self.root.title("Child Window")
 		self.root.attributes('-alpha', .0)
 
 	def resize(self, x: int, y: int, default: bool = False):
@@ -233,7 +247,29 @@ You must:
 		else:
 			return ValueError(f"{self.adress}Window has not an image")
 
-	def command(self, command: list):
+	def mouse_events(self, event):
+		x = self.root.winfo_pointerx() - self.root.winfo_rootx()
+		y = self.root.winfo_pointery() - self.root.winfo_rooty()
+
+		if self.hitbox:
+			if min(self.hitbox[0][0], self.hitbox[1][0]) <= x <= max(self.hitbox[0][0], self.hitbox[1][0]):
+				if min(self.hitbox[1][1], self.hitbox[0][1]) <= y <= max(self.hitbox[1][1], self.hitbox[0][1]):
+					if self.on_hitbox:
+						self.command(self.on_hitbox)
+
+	def click_events(self, event):
+		x = self.root.winfo_pointerx() - self.root.winfo_rootx()
+		y = self.root.winfo_pointery() - self.root.winfo_rooty()
+
+		if self.on_click:
+			self.command(self.on_click)
+
+		if self.hitbox:
+			if min(self.hitbox[0][0], self.hitbox[1][0]) <= x <= max(self.hitbox[0][0], self.hitbox[1][0]):
+				if min(self.hitbox[1][1], self.hitbox[0][1]) <= y <= max(self.hitbox[1][1], self.hitbox[0][1]):
+					self.command(self.on_mouse_hitbox)
+
+	def command(self, command: List[list]):
 		cmd, args = command[0], command[1:]
 
 		if cmd == 'resize':
@@ -297,6 +333,9 @@ f"{['x','y'][i]} must be integer number greater than 0 or relaitive string numbe
 				self.rotate_image( args[0] )
 		elif cmd == 'set_image':
 			self.set_image(args[0])
+		elif cmd == 'execute':
+			for func in args:
+				func()
 		else:
 			raise ValueError(f"{self.adress}Unknow string command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}")
 
@@ -356,6 +395,9 @@ class Command:
 				raise ValueError(f"{['x','y'][i]} must be integer number greater than 0 or relative string number like '+100' or '-30', not {num}")
 
 		return res
+
+	def execute(*args) -> list:
+		return ['execute', *args]
 
 	class window:
 		def resize(x: int, y: int) -> list:
