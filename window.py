@@ -68,6 +68,7 @@ class Window: # it is child window
 		self.on_rhythm_index = -1
 		self.alpha = .0
 		self.on_rhythm = on_rhythm
+		self.pause = 0
 
 		self.default_alpha = float(alpha)
 		self.default_image = None
@@ -77,6 +78,12 @@ class Window: # it is child window
 	def update(self, parent_timeline, fps: int, cursor):
 # returns true if this window is dead, do not use Window.update before Window.root loads ( to load Window.root use Window.set_window(tkinter.TopLevel) )
 		self.alive_time += 1/fps
+
+		if self.pause > 0:
+			self.pause -= 1/fps
+			return True
+		else:
+			self.pause = 0
 
 		if self.parent_tl_name != parent_timeline.name:
 			self.parent_tl_name = parent_timeline.name
@@ -276,13 +283,15 @@ You must:
 
 	def command(self, command: Union[List[list], Callable]):
 		if isinstance(command, list):
-			for cmd in command:
+			if isinstance(command[0], str):
+				self.string_command(command)
+			else:
 				if isinstance(cmd, list):
 					if isinstance(cmd[0], str):
 						self.string_command(cmd)
 					else:
 						raise ValueError(
-f"{self.adress}Invalid command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. Command must be Command object, callable or callable list ( functions must take Window argument ), not {cmd} {type(cmd)}"
+f"{self.adress}Invalid command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. Command must be Command object, callable or list of callable ( functions must take Window argument )"
 							)
 
 				elif callable(command):
@@ -290,7 +299,7 @@ f"{self.adress}Invalid command at Window.movements[{self.movement_index}]: {self
 
 				else:
 					raise ValueError(
-f"{self.adress}Invalid command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. Command must be Command object, callable or callable list ( functions must take Window argument ), not {cmd} {type(cmd)}"
+f"{self.adress}Invalid command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. Command must be Command object, callable or list of callable ( functions must take Window argument )"
 						)
 		
 		elif callable(command):
@@ -298,7 +307,7 @@ f"{self.adress}Invalid command at Window.movements[{self.movement_index}]: {self
 		
 		else:
 			raise ValueError(
-f"{self.adress}Invalid command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. Command must be Command object, callable or callable list ( functions must take Window argument ), not {command} {type(command)}"
+f"{self.adress}Invalid command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. Command must be Command object, callable or list of callable ( functions must take Window argument )"
 				)
 
 	def string_command(self, command: str):
@@ -313,7 +322,7 @@ f"{self.adress}Invalid command at Window.movements[{self.movement_index}]: {self
 					new = eval(f'self.size[{i}]{num}')
 					if new < 0:
 						raise ValueError(
-f"{self.adress}{['x','y'][i]} must be integer number greater than 0 or relaitive string number like '+100' or '-30'. Used relative and gets negative from current window size {self.size}"
+f"{self.adress}{['x','y'][i]} argument must be integer number greater than 0 or relaitive string number like '+100' or '-30'. Used relative and gets negative from current window size {self.size}"
 							)
 					else:
 						res.append(new)
@@ -328,7 +337,7 @@ f"{self.adress}{['x','y'][i]} must be integer number greater than 0 or relaitive
 					new = eval(f'self.size[{i}]{num}')
 					if new < 0:
 						raise ValueError(
-f"{self.adress}{['x','y'][i]} must be integer number greater than 0 or relaitive string number like '+100' or '-30'. Used relative and gets negative from current window size {self.size}"
+f"{self.adress}{['x','y'][i]} argument must be integer number greater than 0 or relaitive string number like '+100' or '-30'. Used relative and gets negative from current window size {self.size}"
 							)
 					else:
 						res.append(new)
@@ -346,7 +355,7 @@ f"{self.adress}{['x','y'][i]} must be integer number greater than 0 or relaitive
 					new = eval(f'self.image_size[{i}]{num}')
 					if new < 0:
 						raise ValueError(
-f"{['x','y'][i]} must be integer number greater than 0 or relaitive string number like '+100' or '-30'. Used relative and gets negative from current window size {self.size}"
+f"{['x','y'][i]} argument must be integer number greater than 0 or relaitive string number like '+100' or '-30'. Used relative and gets negative from current window size {self.size}"
 							)
 					else:
 						res.append(new)
@@ -364,12 +373,24 @@ f"{['x','y'][i]} must be integer number greater than 0 or relaitive string numbe
 				self.rotate_image( args[0] )
 		elif cmd == 'set_image':
 			self.set_image(args[0])
+		elif cmd == 'wait':
+			if isinstance(args[0], int) or isinstance(args[0], float):
+				if args[0] > 0 or args[0] == -1:
+					self.pause = args[0]
+				else:
+					raise ValueError(
+f"{self.adress}Invalid string command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. 'time' argument must be integer or float > 0 or -1 ( endless )"
+						)
+			else:
+				raise ValueError(
+f"{self.adress}Invalid string command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. 'time' argument must be integer or float > 0 or -1 ( endless )"
+					)
 		else:
 			raise ValueError(f"{self.adress}Unknow string command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}")
 
 	def step(self):
 		if self.movements:
-			if len(self.movements)-1 > self.movement_index:
+			if len(self.movements) > self.movement_index:
 				is_list = ( isinstance(self.movements[self.movement_index], list) or isinstance(self.movements[self.movement_index], tuple) )
 
 				if is_list and len(self.movements[self.movement_index]) == 2 and not isinstance(self.movements[self.movement_index][0], str):
@@ -382,7 +403,10 @@ f"{['x','y'][i]} must be integer number greater than 0 or relaitive string numbe
 					self.command(self.movements[self.movement_index])
 					self.movement_index += 1
 			else:
-				if self.cycle:
+				if self.pause:
+					pass
+
+				elif self.cycle:
 					self.undo()
 					self.repeat_count += 1
 				elif self.repeat > self.repeat_count:
@@ -430,6 +454,15 @@ class Command:
 				raise ValueError(f"{['x','y'][i]} must be integer number greater than 0 or relative string number like '+100' or '-30', not {num}")
 
 		return res
+
+	def wait(time: int) -> list:
+		if isinstance(time, int) or isinstance(time, float):
+			if time > 0:
+				return ["wait", time]
+			else:
+				raise ValueError(f"'time' must be integer number more than 0")
+		else:
+			raise ValueError(f"'time' must be integer number more than 0")
 
 	class window:
 		def resize(x: int, y: int) -> list:

@@ -11,14 +11,15 @@ from win32gui import LoadImage, LR_LOADFROMFILE
 
 from PIL import Image, ImageTk
 from pynput import mouse
-from tkinter import Tk, Label, Toplevel
+from tkinter import Tk, Label, Toplevel, Canvas
 from threading import Thread as th
 from traceback import print_exc
 
 
 class Area: # main window
 	def __init__(self, timelines: list, cursor = None, bg_always_on_top: bool = False, minimize_windows: bool = True,
-		bg_func: Callable = None, on_death: Callable = None, on_start: Callable = None):
+		bg_func: Callable = None, on_death: Callable = None, on_start: Callable = None, cursor_circle_radius: int = 3,
+		on_tl_start: Callable = None, on_tl_death: Callable = None):
 		self.timelines = timelines
 
 		self.keyboard_thread = th(target=self.check_keyboard, daemon=True)
@@ -33,6 +34,7 @@ class Area: # main window
 		self.pause_label = Label(self.root, text="PAUSED", font=("Arial", 34), bg="black", fg="white")
 		self.pause_label.place(relx=0.5, rely=0.5, anchor="center")
 		self.pause_label.place_forget()
+		self.cursor_circle_radius = cursor_circle_radius
 
 		if cursor:
 			self.cursor = cursor
@@ -43,6 +45,10 @@ class Area: # main window
 
 		self.screen_width = self.root.winfo_screenwidth()
 		self.screen_height = self.root.winfo_screenheight()
+
+		self.canvas = Canvas(self.root, width=self.screen_width, height=self.screen_height, bg="black", highlightthickness=0)
+		self.canvas.pack()
+		self.circle = self.canvas.create_oval(cursor_circle_radius, cursor_circle_radius, cursor_circle_radius, cursor_circle_radius, fill="white")
 
 		self.root.geometry(f"{self.screen_width}x{self.screen_height}+0+0")
 
@@ -57,10 +63,14 @@ class Area: # main window
 		self.bg_func = bg_func
 		self.on_death = on_death
 		self.on_start = on_start
+		self.on_tl_start = on_tl_start
+		self.on_tl_death = on_tl_death
 
 		self.timeline_index = 0
 		self.paused = True
 		self.pause_count = 0
+		self.bg_animation_count = 0
+		self.on_set_alpha_tl = 0
 
 		if bg_always_on_top:
 			self.root.wm_attributes("-topmost", 1)
@@ -84,19 +94,31 @@ class Area: # main window
 			for timeline in self.timelines:
 				try:
 					self.cursor.update()
+					if self.cursor.position and self.cursor_circle_radius:
+						self.canvas.coords(self.circle,
+							self.cursor.position[0] - self.cursor_circle_radius,
+							self.cursor.position[1] - self.cursor_circle_radius,
+							self.cursor.position[0] + self.cursor_circle_radius,
+							self.cursor.position[1] + self.cursor_circle_radius
+							)
 
 					is_dead = timeline.update(fps, self.cursor)
 
 					if not timeline.initialized:
 						self.init_timeline(timeline)
+						if callable(self.on_tl_start):
+							self.on_tl_start(self, fps)
 
 					if not is_dead:
 						if self.alpha != timeline.bg_alpha:
-							self.root.attributes('-alpha', float(timeline.bg_alpha))
-							self.alpha = timeline.bg_alpha
+							if self.on_set_alpha_tl != self.timeline_index:
+								self.root.attributes('-alpha', float(timeline.bg_alpha))
+								self.alpha = timeline.bg_alpha
 						break
 					else:
 						self.timeline_index += 1
+						if callable(self.on_tl_death):
+							self.on_tl_death(self, fps)
 
 				except Exception as e:
 					self.dead = True
@@ -121,6 +143,27 @@ class Area: # main window
 			obj.name = i
 		timeline.initialized  = True
 
+	def set_bg_alpha(self, alpha: Union[int, float, str]):
+		if isinstance(alpha, int) or isinstance(alpha, float):
+			if 0 <= alpha <= 1:
+				self.alpha = alpha
+				self.root.attributes('-alpha', alpha)
+				self.on_set_alpha_tl = self.timeline_index
+			else:
+				raise ValueError(f"'alpha' must be float or integer from 0 to 1, not {alpha} {type(alpha)}")
+
+		elif isinstance(alpha, str):
+			if alpha[0] in ['-', '+'] and ( alpha[1:].isdigit() or is_float(alpha[1:]) ):
+				new = eval(f'self.alpha{alpha}')
+
+				if new <= 0:
+					self.alpha = 0
+				else:
+					self.alpha = new
+
+			else:
+				raise ValueError(f"new_hp must be integer number greater than 0 or relative string number like '+100' or '-30', not {new_hp}")
+
 	def check_keyboard(self): # logs keystrokes
 		while 1:
 			key = kb.read_event()
@@ -143,7 +186,8 @@ class Area: # main window
 
 
 class TimeLine: # it is a scene where contain child windows, you may use several scenes in one Area in sequience, one after another
-	def __init__(self, objects: list, bg_alpha: float = 1, wait_time: int = 0, alive_time: int = -1, moments: dict = {}, on_start: Callable = None):
+	def __init__(self, objects: list, bg_alpha: float = 1, wait_time: int = 0, alive_time: int = -1, moments: dict = {},
+		on_start: Callable = None, on_death: Callable = None):
 		# objects: list of Window objects
 		# wait_time: delay time before start in seconds
 		self.name = 'independent_timeline'
@@ -155,9 +199,11 @@ class TimeLine: # it is a scene where contain child windows, you may use several
 		self.moments = moments
 
 		self.on_start = on_start
+		self.on_death = on_death
 
 		self.initialized = False
 		self.started = False
+		self.dead = False
 
 	def update(self, fps: int, cursor): # returns true when every object is dead
 		if self.initialized:
@@ -190,7 +236,13 @@ f"'moments' kwarg at TimeLine constructor must be dict with integer keys and cal
 					is_dead = obj.update(self, fps, cursor)
 					results.append(not is_dead)
 
-				return all(results)
+				res = all(results)
+				if res and not self.dead:
+					self.dead = True
+					if callable(self.on_death):
+						self.on_death(self, fps)
+
+				return res
 			else:
 				return False
 		else:
@@ -198,12 +250,14 @@ f"'moments' kwarg at TimeLine constructor must be dict with integer keys and cal
 
 
 class Cursor:
-	def __init__(self, hp: int = 1, radius: int = 0, on_death = None, image: Union[Image, str] = None, transparent_color: str = None, resize: List[[int, int]] = None):
+	def __init__(self, hp: int = 1, radius: int = 0, on_death = None,
+		image: Union[Image, str] = None, transparent_color: str = None, resize: List[[int, int]] = None, alpha: float = 1.0):
 		'''
 		radius: integer number, the "click zone" of cursor expands by this number in all directions. For example 1 gets rectangle 3x3 around cursor, 2 gets 5x5
 		image: string path to image or PIL.Image object, makes cursor with this image
 		transparent_color: string color name, like "black". If you indicated kwarg image, you can remove some color from it. If transparent_color="black" will be removed black color from image
 		resize: list with 2 integers. If you indicated kwarg image, you can resize cursor image
+		alpha: float from 0 to 1, it is cursor window alpha, level of transparency
 		'''
 		if hp >= 0:
 			self.hp = hp
@@ -212,7 +266,14 @@ class Cursor:
 
 		self.on_death = on_death
 		self.dead = False
-		self.radius = radius
+
+		if isinstance(radius, int):
+			if radius >= 0:
+				self.radius = radius
+			else:
+				raise ValueError(f"'radius' must be integer >= 0, not {radius} {type(radius)}")
+		else:
+			raise ValueError(f"'radius' must be integer >= 0, not {radius} {type(radius)}")
 
 		if isinstance(image, str):
 			self.image = Image.open(image)
@@ -223,6 +284,14 @@ class Cursor:
 
 		self.root = None
 		self.transparent_color = transparent_color
+
+		if isinstance(alpha, float) or isinstance(alpha, int):
+			if 0 <= alpha <= 1:
+				self.alpha = alpha
+			else:
+				raise ValueError(f"'alpha' must be float or integer from 0 to 1, not {alpha} {type(alpha)}")
+		else:
+			raise ValueError(f"'alpha' must be float or integer from 0 to 1, not {alpha} {type(alpha)}")
 
 		if resize and isinstance(resize, list):
 			if len(resize) == 2 and isinstance(resize[0], int) and isinstance(resize[1], int):
@@ -266,14 +335,28 @@ class Cursor:
 			raise ValueError(f"new_hp must be integer number greater than 0 or relative string number like '+100' or '-30', not {new_hp}")
 
 	def intersect(self, mouse_position: list, box: list):
-		positions = [ box[0], box[1], (box[0][0], box[1][1]), (box[1][0], box[0][1]) ]
-		x, y = mouse_position
+		if isinstance(mouse_position, list):
+			if len(mouse_position) == 2 and all([ isinstance(i, int) for i in mouse_position ]):
+				if isinstance(box, list):
+					if len(box) == 2 and all([ len(i) == 2 and isinstance(i[0], int) and isinstance(i[1], int) and i[0] >= 0 and i[1] >= 0 for i in box ]):
 
-		for pos in positions:
-			if pos[0] in range(x - self.radius, x + self.radius) and pos[1] in range(y - self.radius, y + self.radius):
-				return True
+						positions = [ box[0], box[1], (box[0][0], box[1][1]), (box[1][0], box[0][1]) ]
+						x, y = mouse_position
 
-		return False
+						for pos in positions:
+							if pos[0] in range(x - self.radius, x + self.radius) and pos[1] in range(y - self.radius, y + self.radius):
+								return True
+
+						return False
+
+					else:
+						raise ValueError(f"'box' must be list with 2 positions ( 2 lists with 2 integers >= 0 ), like [ (0, 0), (1, 1) ], not {box}, {type(box)}")
+				else:
+					raise ValueError(f"'box' must be list with 2 positions ( 2 lists with 2 integers >= 0 ), like [ (0, 0), (1, 1) ], not {box}, {type(box)}")
+			else:
+				raise ValueError(f"'mouse_position' must be list with 2 integers >= 0, like [0, 0], not {mouse_position} {type(mouse_position)}")
+		else:
+			raise ValueError(f"'mouse_position' must be list with 2 integers >= 0, like [0, 0], not {mouse_position} {type(mouse_position)}")
 
 	def set_window(self, root: Union[Tk, Toplevel]):
 		if self.image:
@@ -287,6 +370,7 @@ class Cursor:
 			self.root.config(cursor="none")
 			self.root.attributes('-topmost', True)
 			self.root.overrideredirect(True)
+			self.root.attributes('-alpha', float(self.alpha))
 
 			self.root.geometry(f"{self.image.size[0]}x{self.image.size[1]}")
 
@@ -319,3 +403,11 @@ class Cursor:
 
 	def on_mouse_click(self, x, y, button, pressed): # logs mouse pressed button
 		self.pressed_button = button if pressed else None
+
+
+def is_float(string: str):
+    try:
+        float(string)
+        return True
+    except ValueError:
+        return False
