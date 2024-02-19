@@ -122,7 +122,7 @@ You must:
 							self.on_rhythm_index = 0
 
 						if self.on_rhythm_index > -1 and self.on_rhythm:
-							self.command(self.on_rhythm[self.on_rhythm_index])
+							self.command(self.on_rhythm[self.on_rhythm_index], rhythm=True)
 							self.on_rhythm_index += 1
 							if self.on_rhythm_index > len(self.on_rhythm)-1:
 								self.on_rhythm_index = -1
@@ -281,34 +281,49 @@ You must:
 						elif cursor.pressed_button and callable(self.on_mouse_hitbox):
 							self.command(self.on_mouse_hitbox)
 
-	def command(self, command: Union[List[list], Callable]):
+	def command(self, command: Union[List[list], Callable], rhythm: bool = False):
 		if isinstance(command, list):
 			if isinstance(command[0], str):
 				self.string_command(command)
 			else:
-				if isinstance(cmd, list):
-					if isinstance(cmd[0], str):
-						self.string_command(cmd)
+				if isinstance(command, list):
+					if isinstance(command[0], str):
+						self.string_command(command)
 					else:
-						raise ValueError(
+						if not rhythm:
+							raise ValueError(
 f"{self.adress}Invalid command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. Command must be Command object, callable or list of callable ( functions must take Window argument )"
-							)
+								)
+						else:
+							raise ValueError(
+f"{self.adress}Invalid command at Window.on_rhythm[{self.on_rhythm_index}]: {self.on_rhythm[self.on_rhythm_index]}. Command must be Command object, callable or list of callable ( functions must take Window argument )"
+								)
 
 				elif callable(command):
 					command(self)
 
 				else:
-					raise ValueError(
+					if not rhythm:
+						raise ValueError(
 f"{self.adress}Invalid command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. Command must be Command object, callable or list of callable ( functions must take Window argument )"
-						)
+							)
+					else:
+						raise ValueError(
+f"{self.adress}Invalid command at Window.on_rhythm[{self.on_rhythm_index}]: {self.on_rhythm[self.on_rhythm_index]}. Command must be Command object, callable or list of callable ( functions must take Window argument )"
+							)
 		
 		elif callable(command):
 			command(self)
 		
 		else:
-			raise ValueError(
+			if not rhythm:
+				raise ValueError(
 f"{self.adress}Invalid command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. Command must be Command object, callable or list of callable ( functions must take Window argument )"
-				)
+					)
+			else:
+				raise ValueError(
+f"{self.adress}Invalid command at Window.on_rhythm[{self.on_rhythm_index}]: {self.on_rhythm[self.on_rhythm_index]}. Command must be Command object, callable or list of callable ( functions must take Window argument )"
+					)
 
 	def string_command(self, command: str):
 		cmd, args = command[0], command[1:]
@@ -487,7 +502,7 @@ class Command:
 			res = [Command.window.resize( f'+{speed}', f'+{speed}' if speed >= 0 else f'{speed}' )] * floor(delta/2)
 			res += [Command.window.resize('+0', '+0')] if delta % 2 != 0 else []
 			res += [Command.window.resize( f'-{speed}', f'-{speed}' if speed >= 0 else f'+{speed*-1}' )] * floor(delta/2)
-			return [res]
+			return res
 
 	class image:
 		def resize(x: int, y: int) -> list:
@@ -512,7 +527,7 @@ class Command:
 			res = [Command.image.resize( f'+{speed}', f'+{speed}' if speed >= 0 else f'{speed}' )] * floor(delta/2)
 			res += [Command.image.resize('+0', '+0')] if delta % 2 != 0 else []
 			res += [Command.image.resize( f'-{speed}', f'-{speed}' if speed >= 0 else f'+{speed*-1}' )] * floor(delta/2)
-			return [res]
+			return res
 
 		def set(image: str) -> list: # better use preloaded and resized PIL.Image instead of string image path
 			if isinstance(image, str) or isinstance(image, Image.Image):
@@ -535,4 +550,4 @@ class Command:
 			res = [Command.image.rotate(f'+{speed}' if speed >= 0 else f'{speed}')] * floor(angle/2)
 			res += [Command.image.rotate('+0')] if angle % 2 != 0 else []
 			res += [Command.image.rotate(f'-{speed}' if speed >= 0 else f'+{speed*-1}')] * floor(angle/2)
-			return [res]
+			return res

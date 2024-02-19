@@ -83,6 +83,9 @@ class Area: # main window
 			self.on_start(self)
 		self.paused = False
 
+		self.root.attributes('-alpha', float(self.timelines[0].bg_alpha))
+		self.alpha = self.timelines[0].bg_alpha
+
 		self.update(fps)
 		self.root.mainloop()
 
@@ -155,6 +158,7 @@ class Area: # main window
 		elif isinstance(alpha, str):
 			if alpha[0] in ['-', '+'] and ( alpha[1:].isdigit() or is_float(alpha[1:]) ):
 				new = eval(f'self.alpha{alpha}')
+				print(self.alpha, new)
 
 				if new <= 0:
 					self.alpha = 0
@@ -186,7 +190,7 @@ class Area: # main window
 
 
 class TimeLine: # it is a scene where contain child windows, you may use several scenes in one Area in sequience, one after another
-	def __init__(self, objects: list, bg_alpha: float = 1, wait_time: int = 0, alive_time: int = -1, moments: dict = {},
+	def __init__(self, objects: list, bg_alpha: Union[int, float] = 1, wait_time: int = 0, alive_time: int = -1, moments: dict = {},
 		on_start: Callable = None, on_death: Callable = None):
 		# objects: list of Window objects
 		# wait_time: delay time before start in seconds
