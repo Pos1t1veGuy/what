@@ -10,11 +10,11 @@ from tkinter import Label
 
 
 class Window: # it is child window
-	def __init__(self, movements: Union[ List[Tuple[int, int]], list ], size: List[int], cycle: bool = False,
+	def __init__(self, movements: Union[ List[Tuple[int, int]], list ], size: List[int], cycle: bool = False, repeat: int = -1,
 		always_on_top: bool = True, show_frame: bool = False, alpha: float = 1.0, transparent_color: str = None, bg_color: str = "black",
 		image_path: str = '', image_size: list = [], image_angle: int = 0,
 		spawn_time: int = 0, alive_time: int = None, rhythm: int = -1, on_rhythm: list = [],
-		hitbox: list = [], click_button: str = '<Button-1>', on_mouse_in_hitbox: list = [], on_click: list = [], on_mouse_hitbox_click: list = []):
+		hitbox: list = [], click_button: str = 'left', on_mouse_in_hitbox: list = [], on_click: list = [], on_mouse_hitbox_click: list = []):
 		'''
 		movements: list of the positions or Command object, it change position after every screen update
 		cycle: it may move endlessly
@@ -24,7 +24,7 @@ class Window: # it is child window
 		rhythm: time in seconds how many seconds it will execute on_rhythm commands
 		on_rhythm: list of Command objects
 		hitbox: list of 2 positions, it will execute Command at kwarg on_mouse_in_hitbox if you indicate this kwarg
-		click_button: string button id that tkinter will bind in root.bind, after click it will do Command in on_click, if you indicate kwarg hitbox it will works with on_mouse_hitbox_click too
+		click_button: string pyautogui button id, after click it will do Command in on_click, if you indicate kwarg hitbox it will works with on_mouse_hitbox_click too
 		'''
 
 		self.name = 'independent_child_window'
@@ -32,6 +32,7 @@ class Window: # it is child window
 		self.root = None # Window.root will be loaded after use Window.set_window(tkinter.TopLevel)
 		self.movements = movements
 		self.cycle = cycle
+		self.repeat = repeat
 		self.default_size = size
 		self.size = size
 		self.image = None
@@ -62,6 +63,7 @@ class Window: # it is child window
 
 		self.dead = False
 		self.movement_index = 0
+		self.repeat_count = 0
 		self.rhythm_index = 0
 		self.on_rhythm_index = -1
 		self.alpha = .0
@@ -72,7 +74,7 @@ class Window: # it is child window
 
 		self.rhythm_animation_warning = False
 
-	def update(self, parent_timeline, fps: int):
+	def update(self, parent_timeline, fps: int, cursor):
 # returns true if this window is dead, do not use Window.update before Window.root loads ( to load Window.root use Window.set_window(tkinter.TopLevel) )
 		self.alive_time += 1/fps
 
@@ -88,6 +90,8 @@ class Window: # it is child window
 
 						self.dead = True
 						return False
+
+					self.mouse_listener(cursor)
 
 					if self.alpha == .0:
 						self.root.attributes('-alpha', self.default_alpha)
@@ -117,8 +121,9 @@ You must:
 								self.on_rhythm_index = -1
 
 					self.step()
-
-				return True
+					return True
+				else:
+					return False
 			else:
 				raise AttributeError(f'{self.adress}Child window "Window.root" did not configured')
 		return True
@@ -141,15 +146,13 @@ You must:
 		self.root.overrideredirect(not self.show_frame)
 		self.root.attributes('-alpha', float(self.alpha))
 		self.root.configure(bg=self.bg_color)
+		self.root.config(cursor="none")
 
 		self.screen_width = self.root.winfo_screenwidth()
 		self.screen_height = self.root.winfo_screenheight()
 
 		if self.transparent_color:
 			self.root.wm_attributes("-transparentcolor", transparent_color)
-
-		self.root.bind(self.click_button, self.click_events)
-		self.root.bind("<Motion>", self.mouse_events)
 
 		self.root.title("Child Window")
 		self.root.attributes('-alpha', .0)
@@ -247,31 +250,59 @@ You must:
 		else:
 			return ValueError(f"{self.adress}Window has not an image")
 
-	def mouse_events(self, event):
-		x = self.root.winfo_pointerx() - self.root.winfo_rootx()
-		y = self.root.winfo_pointery() - self.root.winfo_rooty()
+	def mouse_listener(self, cursor):
+		if cursor.position:
+			absolute_x, absolute_y = cursor.position
+			x = absolute_x - self.position[0]
+			y = absolute_y - self.position[1]
 
-		if self.hitbox:
-			if min(self.hitbox[0][0], self.hitbox[1][0]) <= x <= max(self.hitbox[0][0], self.hitbox[1][0]):
-				if min(self.hitbox[1][1], self.hitbox[0][1]) <= y <= max(self.hitbox[1][1], self.hitbox[0][1]):
-					if self.on_hitbox:
-						self.command(self.on_hitbox)
+			is_in_window = cursor.intersect([absolute_x, absolute_y], [ self.position, (self.position[0] + self.size[0], self.position[1] + self.size[1]) ])
 
-	def click_events(self, event):
-		x = self.root.winfo_pointerx() - self.root.winfo_rootx()
-		y = self.root.winfo_pointery() - self.root.winfo_rooty()
+			if is_in_window:
+				if callable(self.on_click):
+					self.command(self.on_click)
 
-		if self.on_click:
-			self.command(self.on_click)
+				if self.hitbox:
+					is_in_hitbox = cursor.intersect([absolute_x, absolute_y], [
+						(self.position[0] + self.hitbox[0][0], self.position[1] + self.hitbox[0][1]),
+						(self.position[0] + self.hitbox[1][0], self.position[1] + self.hitbox[1][1])
+						])
 
-		if self.hitbox:
-			if min(self.hitbox[0][0], self.hitbox[1][0]) <= x <= max(self.hitbox[0][0], self.hitbox[1][0]):
-				if min(self.hitbox[1][1], self.hitbox[0][1]) <= y <= max(self.hitbox[1][1], self.hitbox[0][1]):
-					self.command(self.on_mouse_hitbox)
+					if is_in_hitbox:
+						if callable(self.on_hitbox):
+							self.command(self.on_hitbox)
+						elif cursor.pressed_button and callable(self.on_mouse_hitbox):
+							self.command(self.on_mouse_hitbox)
 
-	def command(self, command: List[list]):
+	def command(self, command: Union[List[list], Callable]):
+		if isinstance(command, list):
+			for cmd in command:
+				if isinstance(cmd, list):
+					if isinstance(cmd[0], str):
+						self.string_command(cmd)
+					else:
+						raise ValueError(
+f"{self.adress}Invalid command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. Command must be Command object, callable or callable list ( functions must take Window argument ), not {cmd} {type(cmd)}"
+							)
+
+				elif callable(command):
+					command(self)
+
+				else:
+					raise ValueError(
+f"{self.adress}Invalid command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. Command must be Command object, callable or callable list ( functions must take Window argument ), not {cmd} {type(cmd)}"
+						)
+		
+		elif callable(command):
+			command(self)
+		
+		else:
+			raise ValueError(
+f"{self.adress}Invalid command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. Command must be Command object, callable or callable list ( functions must take Window argument ), not {command} {type(command)}"
+				)
+
+	def string_command(self, command: str):
 		cmd, args = command[0], command[1:]
-
 		if cmd == 'resize':
 			if not self.image:
 				return ValueError(f"{self.adress}Window has not an image")
@@ -333,9 +364,6 @@ f"{['x','y'][i]} must be integer number greater than 0 or relaitive string numbe
 				self.rotate_image( args[0] )
 		elif cmd == 'set_image':
 			self.set_image(args[0])
-		elif cmd == 'execute':
-			for func in args:
-				func()
 		else:
 			raise ValueError(f"{self.adress}Unknow string command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}")
 
@@ -355,21 +383,28 @@ f"{['x','y'][i]} must be integer number greater than 0 or relaitive string numbe
 					self.movement_index += 1
 			else:
 				if self.cycle:
-					self.movement_index = 0
-					if self.size != self.default_size or self.image != self.default_image:
-						self.resize_window(*self.default_size, default=True)
-					if self.default_image:
-						self.resize_image(0, 0, default=True)
-						self.rotate_image(0, default=True)
-					self.on_rhythm_index = -1
+					self.undo()
+					self.repeat_count += 1
+				elif self.repeat > self.repeat_count:
+					self.undo()
+					self.repeat_count += 1
 				else:
 					self.root.destroy()
 					self.dead = True
-					return False
+					return True
 		else:
 			if self.alpha != .0:
 				self.root.attributes('-alpha', .0)
 				self.alpha = .0
+
+	def undo(self):
+		self.movement_index = 0
+		if self.size != self.default_size or self.image != self.default_image:
+			self.resize_window(*self.default_size, default=True)
+		if self.default_image:
+			self.resize_image(0, 0, default=True)
+			self.rotate_image(0, default=True)
+		self.on_rhythm_index = -1
 
 	@property
 	def adress(self):
@@ -396,9 +431,6 @@ class Command:
 
 		return res
 
-	def execute(*args) -> list:
-		return ['execute', *args]
-
 	class window:
 		def resize(x: int, y: int) -> list:
 			res = ["resize_window"]
@@ -422,7 +454,7 @@ class Command:
 			res = [Command.window.resize( f'+{speed}', f'+{speed}' if speed >= 0 else f'{speed}' )] * floor(delta/2)
 			res += [Command.window.resize('+0', '+0')] if delta % 2 != 0 else []
 			res += [Command.window.resize( f'-{speed}', f'-{speed}' if speed >= 0 else f'+{speed*-1}' )] * floor(delta/2)
-			return res
+			return [res]
 
 	class image:
 		def resize(x: int, y: int) -> list:
@@ -447,7 +479,7 @@ class Command:
 			res = [Command.image.resize( f'+{speed}', f'+{speed}' if speed >= 0 else f'{speed}' )] * floor(delta/2)
 			res += [Command.image.resize('+0', '+0')] if delta % 2 != 0 else []
 			res += [Command.image.resize( f'-{speed}', f'-{speed}' if speed >= 0 else f'+{speed*-1}' )] * floor(delta/2)
-			return res
+			return [res]
 
 		def set(image: str) -> list: # better use preloaded and resized PIL.Image instead of string image path
 			if isinstance(image, str) or isinstance(image, Image.Image):
@@ -470,4 +502,4 @@ class Command:
 			res = [Command.image.rotate(f'+{speed}' if speed >= 0 else f'{speed}')] * floor(angle/2)
 			res += [Command.image.rotate('+0')] if angle % 2 != 0 else []
 			res += [Command.image.rotate(f'-{speed}' if speed >= 0 else f'+{speed*-1}')] * floor(angle/2)
-			return res
+			return [res]
