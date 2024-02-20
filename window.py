@@ -136,6 +136,7 @@ You must:
 		return True
 
 	def set_window(self, root: Union[Tk, Toplevel]):
+
 		self.root = root
 		self.root.geometry(f"{self.default_size[0]}x{self.default_size[1]}")
 

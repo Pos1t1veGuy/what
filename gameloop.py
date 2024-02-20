@@ -3,6 +3,7 @@ from typing import *
 import keyboard as kb
 import pyautogui as pag
 
+import time
 import os
 import win32api
 import win32con
@@ -19,7 +20,8 @@ from traceback import print_exc
 class Area: # main window
 	def __init__(self, timelines: list, cursor = None, bg_always_on_top: bool = False, minimize_windows: bool = True,
 		bg_func: Callable = None, on_death: Callable = None, on_start: Callable = None, cursor_circle_radius: int = 3,
-		on_tl_start: Callable = None, on_tl_death: Callable = None):
+		on_tl_start: Callable = None, on_tl_death: Callable = None,
+		alpha: int = None):
 		self.timelines = timelines
 
 		self.keyboard_thread = th(target=self.check_keyboard, daemon=True)
@@ -55,7 +57,7 @@ class Area: # main window
 		self.root.overrideredirect(1)
 		self.root.configure(bg="black")
 
-		self.alpha = 0
+		self.alpha = alpha
 		self.alive_time = 0
 		self.dead = False
 		self.bg_always_on_top = bg_always_on_top
@@ -71,6 +73,8 @@ class Area: # main window
 		self.pause_count = 0
 		self.bg_animation_count = 0
 		self.on_set_alpha_tl = 0
+		self.timeline_new_alpha = None
+		self.realpha_speed = ''
 
 		if bg_always_on_top:
 			self.root.wm_attributes("-topmost", 1)
@@ -83,13 +87,15 @@ class Area: # main window
 			self.on_start(self)
 		self.paused = False
 
-		self.root.attributes('-alpha', float(self.timelines[0].bg_alpha))
-		self.alpha = self.timelines[0].bg_alpha
+		if self.alpha == None:
+			self.alpha = self.timelines[0].bg_alpha
+			self.root.attributes('-alpha', float(self.timelines[0].bg_alpha))
 
 		self.update(fps)
 		self.root.mainloop()
 
 	def update(self, fps: int): # updates every timeline, will be dead when every timeline is dead
+		start_time = time.time()
 		if self.bg_func:
 			self.bg_func(self, fps)
 
@@ -108,9 +114,23 @@ class Area: # main window
 					is_dead = timeline.update(fps, self.cursor)
 
 					if not timeline.initialized:
-						self.init_timeline(timeline)
+						self.init_timeline(timeline, fps)
 						if callable(self.on_tl_start):
-							self.on_tl_start(self, fps)
+							self.on_tl_start(self)
+
+					if self.timeline_new_alpha and self.realpha_speed:
+						if self.timeline_new_alpha < self.alpha and self.timeline_new_alpha < eval(f'self.alpha{self.realpha_speed}') and float(self.realpha_speed) < 0:
+							self.set_alpha(self.realpha_speed)
+
+						elif self.timeline_new_alpha > self.alpha and self.timeline_new_alpha > eval(f'self.alpha{self.realpha_speed}') and float(self.realpha_speed) > 0:
+							self.set_alpha(self.realpha_speed)
+
+						else:
+							if self.timeline_new_alpha and ( isinstance(self.timeline_new_alpha, float) or isinstance(self.timeline_new_alpha, int) ) and 0 <= self.timeline_new_alpha <= 1:
+								self.set_alpha(self.timeline_new_alpha)
+
+							self.realpha_speed = ''
+							self.timeline_new_alpha = None
 
 					if not is_dead:
 						if self.alpha != timeline.bg_alpha:
@@ -131,25 +151,34 @@ class Area: # main window
 			else:
 				self.root.destroy()
 				print("WHAT? END?")
-			
+		
+		#print(time.time() - start_time)
 		if not self.dead:
-			self.alive_time += 1/fps
-			self.root.after(int(1/fps*1000), self.update, fps)
+			self.alive_time += (time.time() - start_time) + 1/fps
+			wait_time = int( (1/fps - (time.time() - start_time)*0.5) * 1000 )
+			#print(self.alive_time)
+			self.root.after(wait_time, self.update, fps)
 		else:
 			if callable(self.on_death):
-				self.on_death(self, fps)
+				self.on_death(self)
 			self.root.destroy()
 
-	def init_timeline(self, timeline):
+	def init_timeline(self, timeline, fps: int):
 		for i, obj in enumerate(timeline.objects):
 			obj.set_window( Toplevel(self.root) ) # creates child window for every Window object
 			obj.name = i
-		timeline.initialized  = True
+		timeline.initialized = True
 
-	def set_bg_alpha(self, alpha: Union[int, float, str]):
+		if timeline.bg_alpha != self.alpha:
+			new = round(abs( self.alpha - timeline.bg_alpha ) / fps * timeline.bg_realpha_speed, 3)
+			self.realpha_speed = f"+{new}" if timeline.bg_alpha > self.alpha else f"-{new}"
+			print(self.realpha_speed)
+			self.timeline_new_alpha = timeline.bg_alpha
+
+	def set_alpha(self, alpha: Union[int, float, str]):
 		if isinstance(alpha, int) or isinstance(alpha, float):
 			if 0 <= alpha <= 1:
-				self.alpha = alpha
+				self.alpha = round(alpha, 3)
 				self.root.attributes('-alpha', alpha)
 				self.on_set_alpha_tl = self.timeline_index
 			else:
@@ -157,16 +186,18 @@ class Area: # main window
 
 		elif isinstance(alpha, str):
 			if alpha[0] in ['-', '+'] and ( alpha[1:].isdigit() or is_float(alpha[1:]) ):
-				new = eval(f'self.alpha{alpha}')
-				print(self.alpha, new)
+				new = round(eval(f'self.alpha{alpha}'), 3)
 
 				if new <= 0:
 					self.alpha = 0
+				elif new >= 1:
+					self.alpha = 1
 				else:
 					self.alpha = new
 
+				self.root.attributes('-alpha', self.alpha)
 			else:
-				raise ValueError(f"new_hp must be integer number greater than 0 or relative string number like '+100' or '-30', not {new_hp}")
+				raise ValueError(f"'alpha' must be integer number more than 0 or relative string number like '+100' or '-30', not {alpha} {type(alpha)}")
 
 	def check_keyboard(self): # logs keystrokes
 		while 1:
@@ -190,13 +221,15 @@ class Area: # main window
 
 
 class TimeLine: # it is a scene where contain child windows, you may use several scenes in one Area in sequience, one after another
-	def __init__(self, objects: list, bg_alpha: Union[int, float] = 1, wait_time: int = 0, alive_time: int = -1, moments: dict = {},
+	def __init__(self, objects: list, bg_alpha: Union[int, float] = 1, bg_realpha_speed: int = 1,
+		wait_time: int = 0, alive_time: int = -1, moments: dict = {},
 		on_start: Callable = None, on_death: Callable = None):
 		# objects: list of Window objects
 		# wait_time: delay time before start in seconds
 		self.name = 'independent_timeline'
 		self.objects = objects
 		self.bg_alpha = bg_alpha
+		self.bg_realpha_speed = bg_realpha_speed
 		self.alive_time = 0
 		self.wait_time = wait_time
 		self.max_alive_time = alive_time
@@ -217,7 +250,7 @@ class TimeLine: # it is a scene where contain child windows, you may use several
 
 			if not self.started:
 				if callable(self.on_start):
-					self.on_start(fps, cursor)
+					self.on_start(cursor)
 				self.started = True
 
 			for sec in self.moments.keys():
@@ -244,7 +277,7 @@ f"'moments' kwarg at TimeLine constructor must be dict with integer keys and cal
 				if res and not self.dead:
 					self.dead = True
 					if callable(self.on_death):
-						self.on_death(self, fps)
+						self.on_death(self)
 
 				return res
 			else:
@@ -289,13 +322,8 @@ class Cursor:
 		self.root = None
 		self.transparent_color = transparent_color
 
-		if isinstance(alpha, float) or isinstance(alpha, int):
-			if 0 <= alpha <= 1:
-				self.alpha = alpha
-			else:
-				raise ValueError(f"'alpha' must be float or integer from 0 to 1, not {alpha} {type(alpha)}")
-		else:
-			raise ValueError(f"'alpha' must be float or integer from 0 to 1, not {alpha} {type(alpha)}")
+		self.alpha = 0
+		self.set_alpha(alpha, init=True)
 
 		if resize and isinstance(resize, list):
 			if len(resize) == 2 and isinstance(resize[0], int) and isinstance(resize[1], int):
@@ -317,7 +345,7 @@ class Cursor:
 			if new_hp < 0:
 				self.hp = 0
 				if callable(self.on_death) and not self.dead:
-					self.on_death()
+					self.on_death(self)
 					self.dead = True
 			else:			
 				self.hp = new_hp
@@ -329,14 +357,43 @@ class Cursor:
 				if new < 0:
 					self.hp = 0
 					if callable(self.on_death) and not self.dead:
-						self.on_death()
+						self.on_death(self)
 						self.dead = True
 				else:
 					self.hp = new
 			else:
-				raise ValueError(f"new_hp must be integer number greater than 0 or relative string number like '+100' or '-30', not {new_hp}")
+				raise ValueError(f"'new_hp' must be integer number greater than 0 or relative string number like '+100' or '-30', not {new_hp} {type(new_hp)}")
 		else:
-			raise ValueError(f"new_hp must be integer number greater than 0 or relative string number like '+100' or '-30', not {new_hp}")
+			raise ValueError(f"'new_hp' must be integer number greater than 0 or relative string number like '+100' or '-30', not {new_hp} {type(new_hp)}")
+
+	def set_alpha(self, alpha: Union[int, float], init: bool = False):
+		if isinstance(alpha, float) or isinstance(alpha, int):
+			if 0 <= alpha <= 1:
+				self.alpha = alpha
+				if not init:
+					self.root.attributes('-alpha', alpha)
+			else:
+				raise ValueError(f"'alpha' must be float or integer from 0 to 1 or relative string number like '+100' or '-30', not {alpha} {type(alpha)}")
+
+		elif isinstance(alpha, str):
+			if alpha[0] in ['-', '+'] and ( alpha[1:].isdigit() or is_float(alpha[1:]) ):
+				new = eval(f'self.alpha{alpha}')
+				print(f'{self.alpha}{alpha}', new)
+
+				if new < 0:
+					self.alpha = 0
+				elif new > 1:
+					self.alpha = 1
+				else:
+					self.alpha = new
+
+				if not init:
+					self.root.attributes('-alpha', self.alpha)
+			else:
+				raise ValueError(f"'alpha' must be float or integer from 0 to 1 or relative string number like '+100' or '-30', not {alpha} {type(alpha)}")
+
+		else:
+			raise ValueError(f"'alpha' must be float or integer from 0 to 1 or relative string number like '+100' or '-30', not {alpha} {type(alpha)}")
 
 	def intersect(self, mouse_position: list, box: list):
 		if isinstance(mouse_position, list):

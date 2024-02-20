@@ -20,8 +20,8 @@ m2 = Movement(quadratic_y(600, a=1500, step=5)[:int((600-200)/5)]).then(
 tl = TimeLine([
 	Window(m1, [50, 50], bg_color="white", hitbox=[(0,0), (50,50)], on_mouse_in_hitbox=lambda win: cursor.set_hp("-1")),
 	Window(m2, [50, 50], bg_color="green", repeat=2),
-	][::-1], bg_alpha=0.4, moments={5: lambda fps, cursor: cursor.set_hp("-5"), 10: lambda fps, cursor: cursor.set_hp("+15")}, on_death=lambda fps, cursor: print('dead'))
+	][::-1], bg_alpha=0.4, moments={5: lambda cursor: cursor.set_hp("-5"), 10: lambda cursor: cursor.set_hp("+15")}, on_death=lambda cursor: print('dead'))
 
 area = Area([tl], cursor=cursor, minimize_windows=False, bg_func=mainloop)
-area.on_tl_start = lambda area, fps: area.set_bg_alpha(0.2)
+area.on_tl_start = lambda area: area.set_alpha(0.2)
 area.run(fps=120)

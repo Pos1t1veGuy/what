@@ -12,5 +12,5 @@ tl = TimeLine([
 	Window(m2, [50, 50], bg_color="green", cycle=True, rhythm=0.3, on_rhythm=Command.window.impulse(10, speed=10)),
 	], bg_alpha=0.4)
 
-area = Area([tl])
+area = Area([tl], cursor_circle_radius=10)
 area.run()
