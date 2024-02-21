@@ -5,15 +5,16 @@ import pyautogui as pag
 
 from tkinter import Tk, Toplevel
 from PIL import Image, ImageTk
-from math import floor, ceil
 from tkinter import Label
+
+from .types import check_value, Media
+from .movements import Movement
 
 
 class Window: # it is child window
 	def __init__(self, movements: Union[ List[Tuple[int, int]], list ], size: List[int], cycle: bool = False, repeat: int = -1,
 		always_on_top: bool = True, show_frame: bool = False, alpha: float = 1.0, transparent_color: str = None, bg_color: str = "black",
-		image_path: str = '', image_size: list = [], image_angle: int = 0,
-		spawn_time: int = 0, alive_time: int = None, rhythm: int = -1, on_rhythm: list = [],
+		spawn_time: int = 0, alive_time: int = None, rhythm: int = None, on_rhythm: list = [], media: Media = None,
 		hitbox: list = [], click_button: str = 'left', on_mouse_in_hitbox: list = [], on_click: list = [], on_mouse_hitbox_click: list = []):
 		'''
 		movements: list of the positions or Command object, it change position after every screen update
@@ -30,24 +31,70 @@ class Window: # it is child window
 		self.name = 'independent_child_window'
 		self.parent_tl_name = None
 		self.root = None # Window.root will be loaded after use Window.set_window(tkinter.TopLevel)
+		self.media = media
+
+		check_value(movements, [list, Movement], exc_msg=f"Window.movements kwarg must be list, not {movements} {type(movements)}")
 		self.movements = movements
-		self.cycle = cycle
-		self.repeat = repeat
-		self.default_size = size
-		self.size = size
-		self.image = None
-		self.image_path = image_path
-		self.spawn_time = spawn_time
-		self.max_alive_time = alive_time
+
+		check_value(cycle, [bool, int], exc_msg=f"Window.cycle kwarg must be bool, not {cycle} {type(cycle)}")
+		self.cycle = bool(cycle)
+
+		check_value(repeat, int, exc_msg=f"Window.repeat kwarg must be integer more than 0, not {repeat} {type(repeat)}")
+		if repeat == -1:
+			self.repeat = repeat
+		else:
+			self.repeat = repeat-1
+
+		check_value(size, list, exc_msg=f"Window.size kwarg must be list of 2 integers more than 0, not {size} {type(size)}")
+		if len(size) == 2:
+			if isinstance(size[0], int) and isinstance(size[1], int) and size[0] > 0 and size[1] > 0:
+				self.size = size
+			else:
+				raise ValueError(f"Window.size kwarg must be list of 2 integers more than 0, not {size} {type(size)}")
+		else:
+			raise ValueError(f"Window.size kwarg must be list of 2 integers more than 0, not {size} {type(size)}")
+
+		check_value(spawn_time, int, exc_msg=f"Window.spawn_time kwarg must be integer more than 0, not {spawn_time} {type(spawn_time)}")
+		if spawn_time >= 0:
+			self.spawn_time = spawn_time
+		else:
+			raise ValueError(f"Window.spawn_time kwarg must be integer more than 0, not {spawn_time} {type(spawn_time)}")
+
+		check_value(alive_time, [int, type(None)], exc_msg=f"Window.alive_time kwarg must be integer more than 0, not {alive_time} {type(alive_time)}")
+		if alive_time != None:
+			if alive_time > 0:
+				self.max_alive_time = alive_time
+			else:
+				raise ValueError(f"Window.alive_time kwarg must be integer more than 0, not {alive_time} {type(alive_time)}")
+		else:
+			self.max_alive_time = None
+
+		check_value(rhythm, [int, type(None)], exc_msg=f"Window.rhythm kwarg must be integer more than 0, not {rhythm} {type(rhythm)}")
+		if rhythm:
+			if rhythm > 0:
+				self.rhythm = rhythm
+			else:
+				raise ValueError(f"Window.rhythm kwarg must be integer more than 0, not {rhythm} {type(rhythm)}")
+		else:
+			self.rhythm = None
+
 		self.alive_time = 0
 		self.position = [0,0]
-		self.rhythm = rhythm
-		self.image_size = [0,0]
-		self.fixed_image_size = image_size
-		self.image_angle = 0
-		self.default_image_angle = image_angle
 
-		self.hitbox = hitbox
+		check_value(hitbox, [list, tuple], exc_msg=f"Window.hitbox kwarg must be list or tuple of 2 positions, like [ (0, 0), (1, 1) ], not {hitbox} {type(hitbox)}")
+		if len(hitbox) == 2:
+			check_value(hitbox[0], [list, tuple], exc_msg=f"Window.hitbox kwarg must be list or tuple of 2 positions ( with only integers ), like [ (0, 0), (1, 1) ], not {hitbox} {type(hitbox)}")
+			check_value(hitbox[1], [list, tuple], exc_msg=f"Window.hitbox kwarg must be list or tuple of 2 positions ( with only integers ), like [ (0, 0), (1, 1) ], not {hitbox} {type(hitbox)}")
+			if len(hitbox[0]) == 2 and len(hitbox[1]) == 2:
+				if isinstance(hitbox[0][0], int) and isinstance(hitbox[0][1], int) and isinstance(hitbox[1][0], int) and isinstance(hitbox[0][1], int):
+					self.hitbox = hitbox
+				else:
+					raise ValueError(f"Window.hitbox kwarg must be list or tuple of 2 positions ( with only integers ), like [ (0, 0), (1, 1) ], not {hitbox} {type(hitbox)}")
+			else:
+				raise ValueError(f"Window.hitbox kwarg must be list or tuple of 2 positions ( with only integers ), like [ (0, 0), (1, 1) ], not {hitbox} {type(hitbox)}")
+		else:
+			self.hitbox = []
+
 		self.on_hitbox = on_mouse_in_hitbox
 		self.on_mouse_hitbox = on_mouse_hitbox_click
 		self.on_click = on_click
@@ -55,7 +102,9 @@ class Window: # it is child window
 		self.screen_width = None
 		self.screen_height = None
 
+		check_value(always_on_top, [bool, int], exc_msg=f"Window.always_on_top kwarg must be bool, not {always_on_top} {type(always_on_top)}")
 		self.always_on_top = always_on_top
+		check_value(show_frame, [bool, int], exc_msg=f"Window.show_frame kwarg must be bool, not {show_frame} {type(show_frame)}")
 		self.show_frame = show_frame
 		self.transparent_color = transparent_color
 		self.bg_color = bg_color
@@ -71,13 +120,14 @@ class Window: # it is child window
 		self.pause = 0
 
 		self.default_alpha = float(alpha)
-		self.default_image = None
+		self.default_size = size
+		self.default_media = media
 
 		self.rhythm_animation_warning = False
 
 	def update(self, parent_timeline, fps: int, cursor):
 # returns true if this window is dead, do not use Window.update before Window.root loads ( to load Window.root use Window.set_window(tkinter.TopLevel) )
-		self.alive_time += 1/fps
+		start_time = time.time()
 
 		if self.pause > 0:
 			self.pause -= 1/fps
@@ -105,7 +155,7 @@ class Window: # it is child window
 						self.alpha = self.default_alpha
 						del self.default_alpha
 
-					if self.rhythm != -1:
+					if self.rhythm != None:
 						if len(self.on_rhythm) / fps >= self.rhythm and not self.rhythm_animation_warning:
 							print(
 f'''WARNING: {self.adress}Your window has rhythm animation that lasts longer than its assigned execution time in Window constructor at kwarg 'rhythm'
@@ -127,7 +177,11 @@ You must:
 							if self.on_rhythm_index > len(self.on_rhythm)-1:
 								self.on_rhythm_index = -1
 
+					if hasattr(self.media, 'update'):
+						self.media.update(self, parent_timeline, fps, cursor)
+
 					self.step()
+					self.alive_time += (time.time() - start_time) + 1/fps
 					return True
 				else:
 					return False
@@ -140,15 +194,11 @@ You must:
 		self.root = root
 		self.root.geometry(f"{self.default_size[0]}x{self.default_size[1]}")
 
-		if self.image_path:
+		if self.media:
 			self.image_label = Label(self.root)
-			self.image_label.pack()
-			self.set_image(self.image_path)
-			self.default_image = self.image
-			self.image_size = self.image.size
-
-			if self.default_image_angle:
-				self.rotate_image(self.default_image_angle)
+			self.image_label.place(relx=0.5, rely=0.5, anchor="center")
+			
+			self.media.set_label(self.image_label)
 
 		self.root.wm_attributes("-topmost", self.always_on_top)
 		self.root.overrideredirect(not self.show_frame)
@@ -165,98 +215,13 @@ You must:
 		self.root.title("Child Window")
 		self.root.attributes('-alpha', .0)
 
-	def resize(self, x: int, y: int, default: bool = False):
+	def resize(self, x: int, y: int):
+		self.resize_window(x, y)
+		self.media.resize(x, y)
+
+	def resize_window(self, x: int, y: int):
 		self.root.geometry(f"{x}x{y}")
 		self.size = [x,y]
-
-		if self.image:
-			if not default:
-				self.photo = ImageTk.PhotoImage(self.image.resize([x,y]))
-				self.image_size = [x,y]
-			else:
-				self.photo = ImageTk.PhotoImage(self.default_image)
-				self.image_size = self.default_image.size
-
-			self.image_label.configure(image=self.photo, anchor="center")
-		else:
-			return ValueError(f"{self.adress}Window has not an image")
-
-	def resize_image(self, x: int, y: int, default: bool = False):
-		if self.image:
-			if not default:
-				self.photo = ImageTk.PhotoImage(self.image.resize([x,y]))
-				self.image_size = [x,y]
-			else:
-				self.photo = ImageTk.PhotoImage(self.default_image)
-				self.image_size = self.default_image.size
-
-			self.image_label.configure(image=self.photo, anchor="center")
-		else:
-			return ValueError(f"{self.adress}Window has not an image")
-
-	def resize_window(self, x: int, y: int, default: bool = False):
-		if default:
-			self.root.geometry(f"{self.default_size[0]}x{self.default_size[1]}")
-			self.size = self.default_size
-		else:
-			self.root.geometry(f"{x}x{y}")
-			self.size = [x,y]
-
-	def rotate_image(self, angle: int, default: bool = False):
-		if self.image:
-			if not default:
-				self.photo = ImageTk.PhotoImage(self.image.rotate(angle))
-				self.image_angle = angle
-			else:
-				self.photo = ImageTk.PhotoImage(self.default_image.rotate(self.default_image_angle))
-				self.image_angle = self.default_image_angle
-
-			self.image_label.configure(image=self.photo, anchor="center")
-		else:
-			return ValueError(f"{self.adress}Window has not an image")
-
-	def set_image(self, image: str):
-		if image:
-			if isinstance(image, str):
-				if os.path.isfile(image):
-					try:
-						Image.open(image).verify()
-					except (IOError, SyntaxError):
-						raise InvalidImageError(image)
-					self.image = Image.open(image)
-				else:
-					raise FileNotFoundError(image)
-
-			elif isinstance(image, Image.Image):
-				self.image = image
-
-			else:
-				raise ValueError(f"{self.adress}Image must be string path to image file or PIL.Image object, not '{image}', {type(image)}")
-
-			if self.size:
-				if self.fixed_image_size:
-					self.image = self.image.resize(self.fixed_image_size)
-				else:
-					self.image = self.image.resize(self.size)
-
-			self.image_size = self.image.size
-			self.photo = ImageTk.PhotoImage(self.image)
-			self.image_label.configure(image=self.photo)
-		else:
-			raise ValueError(f"{self.adress}Image must be string path to image file or PIL.Image object, not '{image}', {type(image)}")
-
-	def rotate_image(self, angle: int, default: bool = False):
-		if self.image:
-			if not default:
-				self.photo = ImageTk.PhotoImage(self.image.rotate(angle))
-				self.image_angle = angle
-			else:
-				self.photo = ImageTk.PhotoImage(self.default_image.rotate(self.default_image_angle))
-				self.image_angle = self.default_image_angle
-
-			self.image_label.configure(image=self.photo, anchor="center")
-		else:
-			return ValueError(f"{self.adress}Window has not an image")
 
 	def mouse_listener(self, cursor):
 		if cursor.position:
@@ -277,19 +242,36 @@ You must:
 						])
 
 					if is_in_hitbox:
-						if callable(self.on_hitbox):
+						if isinstance(self.on_hitbox, list) and isinstance(self.on_hitbox[0], str):
 							self.command(self.on_hitbox)
-						elif cursor.pressed_button and callable(self.on_mouse_hitbox):
+						elif callable(self.on_hitbox):
+							self.command(self.on_hitbox(self))
+
+						if cursor.pressed_button and callable(self.on_mouse_hitbox):
 							self.command(self.on_mouse_hitbox)
 
 	def command(self, command: Union[List[list], Callable], rhythm: bool = False):
-		if isinstance(command, list):
-			if isinstance(command[0], str):
-				self.string_command(command)
-			else:
-				if isinstance(command, list):
-					if isinstance(command[0], str):
-						self.string_command(command)
+		if command:
+			if isinstance(command, list):
+				if isinstance(command[0], str):
+					self.string_command(command)
+				else:
+					if isinstance(command, list):
+						if isinstance(command[0], str):
+							self.string_command(command)
+						else:
+							if not rhythm:
+								raise ValueError(
+f"{self.adress}Invalid command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. Command must be Command object, callable or list of callable ( functions must take Window argument )"
+									)
+							else:
+								raise ValueError(
+f"{self.adress}Invalid command at Window.on_rhythm[{self.on_rhythm_index}]: {self.on_rhythm[self.on_rhythm_index]}. Command must be Command object, callable or list of callable ( functions must take Window argument )"
+									)
+
+					elif callable(command):
+						command(self)
+
 					else:
 						if not rhythm:
 							raise ValueError(
@@ -299,110 +281,99 @@ f"{self.adress}Invalid command at Window.movements[{self.movement_index}]: {self
 							raise ValueError(
 f"{self.adress}Invalid command at Window.on_rhythm[{self.on_rhythm_index}]: {self.on_rhythm[self.on_rhythm_index]}. Command must be Command object, callable or list of callable ( functions must take Window argument )"
 								)
-
-				elif callable(command):
-					command(self)
-
-				else:
-					if not rhythm:
-						raise ValueError(
-f"{self.adress}Invalid command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. Command must be Command object, callable or list of callable ( functions must take Window argument )"
-							)
-					else:
-						raise ValueError(
-f"{self.adress}Invalid command at Window.on_rhythm[{self.on_rhythm_index}]: {self.on_rhythm[self.on_rhythm_index]}. Command must be Command object, callable or list of callable ( functions must take Window argument )"
-							)
 		
-		elif callable(command):
-			command(self)
-		
-		else:
-			if not rhythm:
-				raise ValueError(
-f"{self.adress}Invalid command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. Command must be Command object, callable or list of callable ( functions must take Window argument )"
-					)
+			elif callable(command):
+				command(self)
+			
 			else:
-				raise ValueError(
+				if not rhythm:
+					raise ValueError(
+f"{self.adress}Invalid command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. Command must be Command object, callable or list of callable ( functions must take Window argument )"
+						)
+				else:
+					raise ValueError(
 f"{self.adress}Invalid command at Window.on_rhythm[{self.on_rhythm_index}]: {self.on_rhythm[self.on_rhythm_index]}. Command must be Command object, callable or list of callable ( functions must take Window argument )"
-					)
+						)
 
 	def string_command(self, command: str):
 		cmd, args = command[0], command[1:]
+
 		if cmd == 'resize':
-			if not self.image:
-				return ValueError(f"{self.adress}Window has not an image")
+			if len(args) >= 2:
 
-			res = []
-			for i, num in enumerate(args):
-				if isinstance(num, str):
-					new = eval(f'self.size[{i}]{num}')
-					if new < 0:
-						raise ValueError(
+				res = []
+				for i, num in enumerate(args):
+					if isinstance(num, str):
+						new = eval(f'self.size[{i}]{num}')
+						if new < 0:
+							raise ValueError(
 f"{self.adress}{['x','y'][i]} argument must be integer number greater than 0 or relaitive string number like '+100' or '-30'. Used relative and gets negative from current window size {self.size}"
-							)
+								)
+						else:
+							res.append(new)
 					else:
-						res.append(new)
-				else:
-					res.append(num)
+						res.append(num)
 
-			self.resize( int(res[0]), int(res[1]) )
-		elif cmd == 'resize_window':
-			res = []
-			for i, num in enumerate(args):
-				if isinstance(num, str):
-					new = eval(f'self.size[{i}]{num}')
-					if new < 0:
-						raise ValueError(
-f"{self.adress}{['x','y'][i]} argument must be integer number greater than 0 or relaitive string number like '+100' or '-30'. Used relative and gets negative from current window size {self.size}"
-							)
-					else:
-						res.append(new)
-				else:
-					res.append(num)
+				self.resize( int(res[0]), int(res[1]) )
 
-			self.resize_window( int(res[0]), int(res[1]) )
-		elif cmd == 'resize_image':
-			if not self.image:
-				return ValueError(f"{self.adress}Window has not an image")
-
-			res = []
-			for i, num in enumerate(args):
-				if isinstance(num, str):
-					new = eval(f'self.image_size[{i}]{num}')
-					if new < 0:
-						raise ValueError(
-f"{['x','y'][i]} argument must be integer number greater than 0 or relaitive string number like '+100' or '-30'. Used relative and gets negative from current window size {self.size}"
-							)
-					else:
-						res.append(new)
-				else:
-					res.append(num)
-
-			self.resize_image( int(res[0]), int(res[1]) )
-		elif cmd == 'rotate_image':
-			if not self.image:
-				return ValueError(f"{self.adress}Window has not an image")
-
-			if isinstance(args[0], str):
-				self.rotate_image( eval(f'self.image_angle{args[0]}') )
 			else:
-				self.rotate_image( args[0] )
-		elif cmd == 'set_image':
-			self.set_image(args[0])
+				raise ValueError(f"{self.adress}Command.window.resize must contains 2 integer arguments more than 0, not {args}")
+
+		elif cmd == 'resize_window':
+			if len(args) >= 2:
+
+				res = []
+				for i, num in enumerate(args):
+					if isinstance(num, str):
+						new = eval(f'self.size[{i}]{num}')
+						if new < 0:
+							raise ValueError(
+f"{self.adress}{['x','y'][i]} argument must be integer number greater than 0 or relaitive string number like '+100' or '-30'. Used relative and gets negative from current window size {self.size}"
+								)
+						else:
+							res.append(new)
+					else:
+						res.append(num)
+
+				self.resize_window( int(res[0]), int(res[1]) )
+
+			else:
+				raise ValueError(f"{self.adress}Command.window.resize must contains 2 integer arguments more than 0, not {args}")
+
+		elif cmd == 'resize_media':
+			if not self.media:
+				return ValueError(f"{self.adress}Window has not an media")
+
+			if len(args) >= 2:
+				self.media.resize(*args)
+			else:
+				raise ValueError(f"{self.adress}Command.media.resize must contains 2 integer arguments more than 0, not {args}")
+
+		elif cmd == 'rotate_media':
+			if not self.media:
+				return ValueError(f"{self.adress}Window has not an media")
+
+			if len(args) >= 1:
+				self.media.rotate(args[0])
+			else:
+				raise ValueError(f"{self.adress}Command.media.rotate must contains 1 integer arguments more than 0, not {args}")
+
+		elif cmd == 'set_media':
+			if len(args) >= 1:
+				self.media = args[0]
+			else:
+				raise ValueError(f"{self.adress}Command.media.set must contains 1 Media argument, not {args}")
+
 		elif cmd == 'wait':
-			if isinstance(args[0], int) or isinstance(args[0], float):
-				if args[0] > 0 or args[0] == -1:
-					self.pause = args[0]
-				else:
-					raise ValueError(
-f"{self.adress}Invalid string command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. 'time' argument must be integer or float > 0 or -1 ( endless )"
-						)
+			check_value(args[0], [int, float],
+exc_msg=f"{self.adress}Invalid string command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. 'time' argument must be integer or float > 0 or -1 ( endless )"
+				)
+			if args[0] > 0 or args[0] == -1:
+				self.pause = args[0]
 			else:
 				raise ValueError(
 f"{self.adress}Invalid string command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. 'time' argument must be integer or float > 0 or -1 ( endless )"
 					)
-		else:
-			raise ValueError(f"{self.adress}Unknow string command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}")
 
 	def step(self):
 		if self.movements:
@@ -429,8 +400,7 @@ f"{self.adress}Invalid string command at Window.movements[{self.movement_index}]
 					self.undo()
 					self.repeat_count += 1
 				else:
-					self.root.destroy()
-					self.dead = True
+					self.kill()
 					return True
 		else:
 			if self.alpha != .0:
@@ -439,116 +409,19 @@ f"{self.adress}Invalid string command at Window.movements[{self.movement_index}]
 
 	def undo(self):
 		self.movement_index = 0
-		if self.size != self.default_size or self.image != self.default_image:
-			self.resize_window(*self.default_size, default=True)
-		if self.default_image:
-			self.resize_image(0, 0, default=True)
-			self.rotate_image(0, default=True)
 		self.on_rhythm_index = -1
+
+		if self.size != self.default_size:
+			self.resize_window(*self.default_size)
+
+		if self.media != self.default_media:
+			self.media = self.default_media
+
+	def kill(self):
+		self.dead = True
+		if self.root:
+			self.root.destroy()
 
 	@property
 	def adress(self):
 		return f'Timeline {self.parent_tl_name}, Window {self.name}: '
-	
-
-class Command:
-# you can use Command object instead of movement position in Window constructor, it allows you to perform animation ( resize, rotate_image and etc. ) in parallel with the movements
-	def resize(x: int, y: int) -> list:
-		res = ["resize"]
-		for i, num in enumerate([x, y]):
-			if isinstance(num, str):
-				if num[0] in ['-', '+'] and num[1:].isdigit():
-					res.append(num)
-				else:
-					raise ValueError(f"{['x','y'][i]} must be integer number greater than 0 or relative string number like '+100' or '-30', not {num}")
-			elif isinstance(num, int):
-				if num < 0:
-					raise ValueError(f"{['x','y'][i]} must be greater than 0, not {num}")
-				else:
-					res.append(num)
-			else:
-				raise ValueError(f"{['x','y'][i]} must be integer number greater than 0 or relative string number like '+100' or '-30', not {num}")
-
-		return res
-
-	def wait(time: int) -> list:
-		if isinstance(time, int) or isinstance(time, float):
-			if time > 0:
-				return ["wait", time]
-			else:
-				raise ValueError(f"'time' must be integer number more than 0")
-		else:
-			raise ValueError(f"'time' must be integer number more than 0")
-
-	class window:
-		def resize(x: int, y: int) -> list:
-			res = ["resize_window"]
-			for i, num in enumerate([x, y]):
-				if isinstance(num, str):
-					if num[0] in ['-', '+'] and num[1:].isdigit():
-						res.append(num)
-					else:
-						raise ValueError(f"{['x','y'][i]} must be integer number greater than 0 or relative string number like '+100' or '-30', not {num}")
-				elif isinstance(num, int):
-					if num < 0:
-						raise ValueError(f"{['x','y'][i]} must be greater than 0, not {num}")
-					else:
-						res.append(num)
-				else:
-					raise ValueError(f"{['x','y'][i]} must be integer number greater than 0 or relative string number like '+100' or '-30', not {num}")
-
-			return res
-
-		def impulse(delta: int, speed: int = 1) -> list:
-			res = [Command.window.resize( f'+{speed}', f'+{speed}' if speed >= 0 else f'{speed}' )] * floor(delta/2)
-			res += [Command.window.resize('+0', '+0')] if delta % 2 != 0 else []
-			res += [Command.window.resize( f'-{speed}', f'-{speed}' if speed >= 0 else f'+{speed*-1}' )] * floor(delta/2)
-			return res
-
-	class image:
-		def resize(x: int, y: int) -> list:
-			res = ["resize_image"]
-			for i, num in enumerate([x, y]):
-				if isinstance(num, str):
-					if num[0] in ['-', '+'] and num[1:].isdigit():
-						res.append(num)
-					else:
-						raise ValueError(f"{['x','y'][i]} must be integer number greater than 0 or relative string number like '+100' or '-30', not '{num}' {type(num)}")
-				elif isinstance(num, int):
-					if num < 0:
-						raise ValueError(f"{['x','y'][i]} must be greater than 0, not {num}")
-					else:
-						res.append(num)
-				else:
-					raise ValueError(f"{['x','y'][i]} must be integer number greater than 0 or relative string number like '+100' or '-30', not '{num}' {type(num)}")
-
-			return res
-
-		def resize_impulse(delta: int, speed: int = 1) -> list:
-			res = [Command.image.resize( f'+{speed}', f'+{speed}' if speed >= 0 else f'{speed}' )] * floor(delta/2)
-			res += [Command.image.resize('+0', '+0')] if delta % 2 != 0 else []
-			res += [Command.image.resize( f'-{speed}', f'-{speed}' if speed >= 0 else f'+{speed*-1}' )] * floor(delta/2)
-			return res
-
-		def set(image: str) -> list: # better use preloaded and resized PIL.Image instead of string image path
-			if isinstance(image, str) or isinstance(image, Image.Image):
-				return ["set_image", image]
-			else:
-				raise ValueError(f"image must be string path to image file or PIL.Image object, not '{image}', {type(image)}")
-
-		def rotate(angle: int) -> list:
-			if isinstance(angle, int):
-				return ["rotate_image", angle]
-			elif isinstance(angle, str):
-				if angle[0] in ['-', '+'] and angle[1:].isdigit():
-					return ["rotate_image", angle]
-				else:
-					raise ValueError(f"angle must be integer number greater than 0 or relative string number like '+100' or '-30', not '{angle}' {type(angle)}")
-			else:
-				raise ValueError(f"angle must be integer number greater than 0 or relative string number like '+100' or '-30', not '{angle}' {type(angle)}")
-
-		def rotate_impulse(angle: int, speed: int = 1) -> list:
-			res = [Command.image.rotate(f'+{speed}' if speed >= 0 else f'{speed}')] * floor(angle/2)
-			res += [Command.image.rotate('+0')] if angle % 2 != 0 else []
-			res += [Command.image.rotate(f'-{speed}' if speed >= 0 else f'+{speed*-1}')] * floor(angle/2)
-			return res

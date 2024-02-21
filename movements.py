@@ -1,4 +1,5 @@
 from math import *
+from .types import check_value
 
 def linear_x(distance: int, k: int = 1, b: int = 0, step: int = 1, start_at: list = [0, 0]) -> list: # y = kx + b
     return [ (start_at[0] + x, start_at[1] + int(k*x + b)) for x in range(0, distance, step) ]
@@ -17,19 +18,53 @@ def quadratic_y(distance: int, a: int = 1, b: int = 0, c: int = 1, step: int = 1
 
 class Movement:
     def __init__(self, positions: list = []):
-        self.positions = positions
+        check_value(positions, [list, tuple],
+exc_msg=f"Movement.positions kwarg must be list or tuple of integer positions, like [ (0, 0), (0, 0) ] or one position, like [0, 0], not {positions} {type(positions)}"
+            )
+        if len(positions) == 2:
+            if isinstance(positions[0], int) and isinstance(positions[1], int):
+                self.positions = [positions]
+            else:
+                raise ValueError(
+f"Movement.positions kwarg must be list or tuple of integer positions, like [ (0, 0), (0, 0) ] or one position, like [0, 0], not {positions} {type(positions)}"
+                    )
+        else:
+            self.positions = positions
+
 
     def then(self, positions: list):
         i = -1
         while isinstance(self.positions[i][0], str): # to find last position instead of string command
             i -= 1
         last_x, last_y = self.positions[i]
-        new_positions = [ (last_x + x, last_y + y) for x, y in positions ]
-        self.positions = [ *self.positions, *new_positions ]
-        return self
 
-    def do_then(self, command: str):
-        self.positions.append(command)
+        if positions:
+            if isinstance(positions, list):
+                if len(positions[0]) > 0:
+                    if isinstance(positions[0], str):
+                        self.positions.append( positions )
+                        return self
+
+                    elif isinstance(positions[0], list):
+                        if len(positions[0]) == 2:
+                            if isinstance(positions[0][0], int) and isinstance(positions[0][1], int):
+                                self.positions.append( positions )
+                                return self
+
+                        if isinstance(positions[0], str):
+                            self.positions.append( positions )
+                            return self
+
+                    for pos in positions:
+                        if isinstance(pos[0], str):
+                            self.positions.append( pos )
+                        else:
+                            self.positions.append( (last_x + pos[0], last_y + pos[1]) )
+            else:
+                raise ValueError(
+f"Movement.positions kwarg must be list or tuple of integer positions, like [ (0, 0), (0, 0) ] or one position, like [0, 0], not {positions} {type(positions)}"
+                    )
+
         return self
 
     def mirror_x(self, width: int):

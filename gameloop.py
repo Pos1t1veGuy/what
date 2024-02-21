@@ -59,7 +59,7 @@ class Area: # main window
 
 		self.alpha = alpha
 		self.alive_time = 0
-		self.dead = False
+		self.stopping = False
 		self.bg_always_on_top = bg_always_on_top
 
 		self.bg_func = bg_func
@@ -75,6 +75,8 @@ class Area: # main window
 		self.on_set_alpha_tl = 0
 		self.timeline_new_alpha = None
 		self.realpha_speed = ''
+		self.dead = False
+		self.fps = 0
 
 		if bg_always_on_top:
 			self.root.wm_attributes("-topmost", 1)
@@ -87,19 +89,38 @@ class Area: # main window
 			self.on_start(self)
 		self.paused = False
 
+		self.fps = fps
 		if self.alpha == None:
 			self.alpha = self.timelines[0].bg_alpha
 			self.root.attributes('-alpha', float(self.timelines[0].bg_alpha))
 
-		self.update(fps)
+		self.update()
 		self.root.mainloop()
 
-	def update(self, fps: int): # updates every timeline, will be dead when every timeline is dead
+	def update(self): # updates every timeline, will be dead when every timeline is dead
 		start_time = time.time()
 		if self.bg_func:
-			self.bg_func(self, fps)
+			self.bg_func(self, self.fps)
 
-		if not self.paused:
+		if self.timeline_new_alpha != None and self.realpha_speed != '':
+			if self.timeline_new_alpha < self.alpha and self.timeline_new_alpha < eval(f'self.alpha{self.realpha_speed}') and float(self.realpha_speed) < 0:
+				self.set_alpha(self.realpha_speed)
+
+			elif self.timeline_new_alpha > self.alpha and self.timeline_new_alpha > eval(f'self.alpha{self.realpha_speed}') and float(self.realpha_speed) > 0:
+				self.set_alpha(self.realpha_speed)
+
+			else:
+				if self.timeline_new_alpha and ( isinstance(self.timeline_new_alpha, float) or isinstance(self.timeline_new_alpha, int) ) and 0 <= self.timeline_new_alpha <= 1:
+					self.set_alpha(self.timeline_new_alpha)
+
+				self.realpha_speed = ''
+				self.timeline_new_alpha = None
+
+		if self.dead and self.realpha_speed == '' and self.timeline_new_alpha == None:
+			self.set_alpha(0)
+
+
+		if not self.paused and not self.dead:
 			for timeline in self.timelines:
 				try:
 					self.cursor.update()
@@ -111,26 +132,12 @@ class Area: # main window
 							self.cursor.position[1] + self.cursor_circle_radius
 							)
 
-					is_dead = timeline.update(fps, self.cursor)
+					is_dead = timeline.update(self.fps, self.cursor)
 
 					if not timeline.initialized:
-						self.init_timeline(timeline, fps)
+						self.init_timeline(timeline)
 						if callable(self.on_tl_start):
 							self.on_tl_start(self)
-
-					if self.timeline_new_alpha and self.realpha_speed:
-						if self.timeline_new_alpha < self.alpha and self.timeline_new_alpha < eval(f'self.alpha{self.realpha_speed}') and float(self.realpha_speed) < 0:
-							self.set_alpha(self.realpha_speed)
-
-						elif self.timeline_new_alpha > self.alpha and self.timeline_new_alpha > eval(f'self.alpha{self.realpha_speed}') and float(self.realpha_speed) > 0:
-							self.set_alpha(self.realpha_speed)
-
-						else:
-							if self.timeline_new_alpha and ( isinstance(self.timeline_new_alpha, float) or isinstance(self.timeline_new_alpha, int) ) and 0 <= self.timeline_new_alpha <= 1:
-								self.set_alpha(self.timeline_new_alpha)
-
-							self.realpha_speed = ''
-							self.timeline_new_alpha = None
 
 					if not is_dead:
 						if self.alpha != timeline.bg_alpha:
@@ -141,39 +148,39 @@ class Area: # main window
 					else:
 						self.timeline_index += 1
 						if callable(self.on_tl_death):
-							self.on_tl_death(self, fps)
+							self.on_tl_death(self)
 
 				except Exception as e:
-					self.dead = True
-					self.root.attributes('-alpha', 0.0)
+					self.kill()
 					print_exc()
 					return
 			else:
-				self.root.destroy()
-				print("WHAT? END?")
-		
-		#print(time.time() - start_time)
-		if not self.dead:
-			self.alive_time += (time.time() - start_time) + 1/fps
-			wait_time = int( (1/fps - (time.time() - start_time)*0.5) * 1000 )
-			#print(self.alive_time)
-			self.root.after(wait_time, self.update, fps)
-		else:
+				self.kill()
+
+		if self.alpha == 0 and self.dead:
+			print("WHAT? END?")
 			if callable(self.on_death):
 				self.on_death(self)
+			for timeline in self.timelines:
+				timeline.kill()
 			self.root.destroy()
 
-	def init_timeline(self, timeline, fps: int):
+		self.alive_time += (time.time() - start_time) + 1/self.fps
+		wait_time = int( (1/self.fps - (time.time() - start_time)*0.5) * 1000 )
+		self.root.after(wait_time, self.update)
+
+	def init_timeline(self, timeline):
 		for i, obj in enumerate(timeline.objects):
 			obj.set_window( Toplevel(self.root) ) # creates child window for every Window object
 			obj.name = i
 		timeline.initialized = True
+		self.animate_alpha(timeline.bg_alpha, timeline.bg_realpha_speed)
 
-		if timeline.bg_alpha != self.alpha:
-			new = round(abs( self.alpha - timeline.bg_alpha ) / fps * timeline.bg_realpha_speed, 3)
-			self.realpha_speed = f"+{new}" if timeline.bg_alpha > self.alpha else f"-{new}"
-			print(self.realpha_speed)
-			self.timeline_new_alpha = timeline.bg_alpha
+	def animate_alpha(self, new_alpha: Union[float, int], speed: int):
+		if new_alpha != self.alpha:
+			new = round(abs( self.alpha - new_alpha ) / self.fps * speed, 3)
+			self.realpha_speed = f"+{new}" if new_alpha > self.alpha else f"-{new}"
+			self.timeline_new_alpha = new_alpha
 
 	def set_alpha(self, alpha: Union[int, float, str]):
 		if isinstance(alpha, int) or isinstance(alpha, float):
@@ -205,7 +212,7 @@ class Area: # main window
 
 			if key.event_type == kb.KEY_DOWN:
 				if key.name == 'esc':
-					self.dead = True
+					self.kill()
 					return
 
 				if key.name == 'space':
@@ -218,6 +225,16 @@ class Area: # main window
 					else:
 						self.pause_label.place(relx=0.5, rely=0.5, anchor="center")
 						self.root.config(cursor="arrow")
+
+	def kill(self, realpha_speed: int = 2):
+		if self.timeline_new_alpha and self.realpha_speed and not self.dead:
+			self.realpha_speed = ''
+			self.timeline_new_alpha = None
+		
+		if not self.timeline_new_alpha and not self.realpha_speed:
+			self.animate_alpha(0, realpha_speed)
+
+		self.dead = True
 
 
 class TimeLine: # it is a scene where contain child windows, you may use several scenes in one Area in sequience, one after another
@@ -243,8 +260,8 @@ class TimeLine: # it is a scene where contain child windows, you may use several
 		self.dead = False
 
 	def update(self, fps: int, cursor): # returns true when every object is dead
+		start_time = time.time()
 		if self.initialized:
-			self.alive_time += 1/fps
 			if self.alive_time >= self.max_alive_time and self.max_alive_time != -1:
 				return True
 
@@ -256,11 +273,11 @@ class TimeLine: # it is a scene where contain child windows, you may use several
 			for sec in self.moments.keys():
 				if sec <= self.alive_time and self.moments[sec] != 'done':
 					if callable(self.moments[sec]):
-						self.moments[sec](fps, cursor)
+						self.moments[sec](cursor)
 						self.moments[sec] = 'done'
 					elif callable(self.moments[sec]) and all([ callable(i) for i in self.moments[sec] ]):
 						for func in self.moments[sec]:
-							func(fps, cursor)
+							func(cursor)
 						self.moments[sec] = 'done'
 					else:
 						raise ValueError(
@@ -277,13 +294,18 @@ f"'moments' kwarg at TimeLine constructor must be dict with integer keys and cal
 				if res and not self.dead:
 					self.dead = True
 					if callable(self.on_death):
-						self.on_death(self)
+						self.on_death(cursor)
 
+				self.alive_time += (time.time() - start_time) + 1/fps
 				return res
 			else:
 				return False
 		else:
 			return False
+
+	def kill(self):
+		for obj in self.objects:
+			obj.kill()
 
 
 class Cursor:
@@ -346,7 +368,7 @@ class Cursor:
 				self.hp = 0
 				if callable(self.on_death) and not self.dead:
 					self.on_death(self)
-					self.dead = True
+					self.kill()
 			else:			
 				self.hp = new_hp
 
@@ -357,8 +379,8 @@ class Cursor:
 				if new < 0:
 					self.hp = 0
 					if callable(self.on_death) and not self.dead:
-						self.on_death(self)
-						self.dead = True
+						self.on_death()
+						self.kill()
 				else:
 					self.hp = new
 			else:
@@ -378,7 +400,6 @@ class Cursor:
 		elif isinstance(alpha, str):
 			if alpha[0] in ['-', '+'] and ( alpha[1:].isdigit() or is_float(alpha[1:]) ):
 				new = eval(f'self.alpha{alpha}')
-				print(f'{self.alpha}{alpha}', new)
 
 				if new < 0:
 					self.alpha = 0
@@ -465,10 +486,15 @@ class Cursor:
 	def on_mouse_click(self, x, y, button, pressed): # logs mouse pressed button
 		self.pressed_button = button if pressed else None
 
+	def kill(self):
+		self.dead = True
+		if self.root:
+			self.root.destroy()
+
 
 def is_float(string: str):
-    try:
-        float(string)
-        return True
-    except ValueError:
-        return False
+	try:
+		float(string)
+		return True
+	except ValueError:
+		return False
