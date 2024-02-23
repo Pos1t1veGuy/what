@@ -16,14 +16,17 @@ from tkinter import Tk, Label, Toplevel, Canvas
 from threading import Thread as th
 from traceback import print_exc
 
+from .types import Media, check_value
+
 
 class Area: # main window
-	def __init__(self, timelines: list, cursor = None, bg_always_on_top: bool = False, minimize_windows: bool = True,
+	def __init__(self, cursor = None, bg_always_on_top: bool = False, minimize_windows: bool = True,
 		bg_func: Callable = None, on_death: Callable = None, on_start: Callable = None, cursor_circle_radius: int = 3,
-		on_tl_start: Callable = None, on_tl_death: Callable = None,
-		alpha: int = None):
-		self.timelines = timelines
+		on_tl_start: Callable = None, on_tl_death: Callable = None, on_click: Callable = None,
+		alpha: int = None, media: Media = None):
 
+		self.timelines = []
+		self.kb_thread_started = False
 		self.keyboard_thread = th(target=self.check_keyboard, daemon=True)
 		self.keyboard_thread.start()
 
@@ -36,7 +39,17 @@ class Area: # main window
 		self.pause_label = Label(self.root, text="PAUSED", font=("Arial", 34), bg="black", fg="white")
 		self.pause_label.place(relx=0.5, rely=0.5, anchor="center")
 		self.pause_label.place_forget()
+		check_value(cursor_circle_radius, int, exc_msg=f"'cursor_circle_radius' kwarg must be integer >= 0, not {cursor_circle_radius} {type(cursor_circle_radius)}")
 		self.cursor_circle_radius = cursor_circle_radius
+
+		if media:
+			self.media_label = Label(self.root)
+			self.media_label.pack(expand=True, anchor='center')
+			self.media = media
+			self.media.set_label(self.media_label)
+		else:
+			self.media = None
+			self.media_label = None
 
 		if cursor:
 			self.cursor = cursor
@@ -57,9 +70,11 @@ class Area: # main window
 		self.root.overrideredirect(1)
 		self.root.configure(bg="black")
 
+		check_value(alpha, [int, float], exc_msg=f"'alpha' kwarg must be integer of float from 0 to 1, not {alpha} {type(alpha)}")
 		self.alpha = alpha
 		self.alive_time = 0
 		self.stopping = False
+		check_value(bg_always_on_top, [int, bool], exc_msg=f"'bg_always_on_top' kwarg must be bool, not {bg_always_on_top} {type(bg_always_on_top)}")
 		self.bg_always_on_top = bg_always_on_top
 
 		self.bg_func = bg_func
@@ -67,6 +82,7 @@ class Area: # main window
 		self.on_start = on_start
 		self.on_tl_start = on_tl_start
 		self.on_tl_death = on_tl_death
+		self.on_click = on_click
 
 		self.timeline_index = 0
 		self.paused = True
@@ -77,12 +93,21 @@ class Area: # main window
 		self.realpha_speed = ''
 		self.dead = False
 		self.fps = 0
+		self.key = None
 
 		if bg_always_on_top:
 			self.root.wm_attributes("-topmost", 1)
 
+	def set_timelines(self, timelines: list):
+		check_value(timelines, [tuple, list], exc_msg=f"'timelines' arg must be list of TimeLine objects, not {timelines} {type(timelines)}")
+		self.timelines = timelines
+
 		for i, timeline in enumerate(self.timelines):
 			timeline.name = i
+
+	def add_timeline(self, timeline):
+		self.timelines.append(timeline)
+		self.timelines[-1].name = self.timelines.index(self.timelines[-1])
 
 	def run(self, fps: int = 90): # starts main loop
 		if callable(self.on_start):
@@ -94,6 +119,9 @@ class Area: # main window
 			self.alpha = self.timelines[0].bg_alpha
 			self.root.attributes('-alpha', float(self.timelines[0].bg_alpha))
 
+		#while not self.kb_thread_started:
+			#time.sleep(0.3)
+
 		self.update()
 		self.root.mainloop()
 
@@ -101,6 +129,9 @@ class Area: # main window
 		start_time = time.time()
 		if self.bg_func:
 			self.bg_func(self, self.fps)
+
+		if self.cursor.pressed_button and callable(self.on_click):
+			self.on_click(self)
 
 		if self.timeline_new_alpha != None and self.realpha_speed != '':
 			if self.timeline_new_alpha < self.alpha and self.timeline_new_alpha < eval(f'self.alpha{self.realpha_speed}') and float(self.realpha_speed) < 0:
@@ -121,6 +152,10 @@ class Area: # main window
 
 
 		if not self.paused and not self.dead:
+
+			if hasattr(self.media, 'update'):
+				self.media.update(self, None, self.fps, self.cursor)
+
 			for timeline in self.timelines:
 				try:
 					self.cursor.update()
@@ -165,9 +200,9 @@ class Area: # main window
 				timeline.kill()
 			self.root.destroy()
 
-		self.alive_time += (time.time() - start_time) + 1/self.fps
-		wait_time = int( (1/self.fps - (time.time() - start_time)*0.5) * 1000 )
-		self.root.after(wait_time, self.update)
+		timedelta = (time.time() - start_time)
+		self.alive_time += timedelta + 1/self.fps
+		self.root.after(int( (1/self.fps - timedelta*0.5) * 1000 ), self.update)
 
 	def init_timeline(self, timeline):
 		for i, obj in enumerate(timeline.objects):
@@ -211,6 +246,7 @@ class Area: # main window
 			key = kb.read_event()
 
 			if key.event_type == kb.KEY_DOWN:
+				self.key = key
 				if key.name == 'esc':
 					self.kill()
 					return
@@ -227,6 +263,7 @@ class Area: # main window
 						self.root.config(cursor="arrow")
 
 	def kill(self, realpha_speed: int = 2):
+		self.root.wm_attributes("-topmost", 1)
 		if self.timeline_new_alpha and self.realpha_speed and not self.dead:
 			self.realpha_speed = ''
 			self.timeline_new_alpha = None
@@ -416,29 +453,30 @@ class Cursor:
 		else:
 			raise ValueError(f"'alpha' must be float or integer from 0 to 1 or relative string number like '+100' or '-30', not {alpha} {type(alpha)}")
 
-	def intersect(self, mouse_position: list, box: list):
-		if isinstance(mouse_position, list):
-			if len(mouse_position) == 2 and all([ isinstance(i, int) for i in mouse_position ]):
-				if isinstance(box, list):
-					if len(box) == 2 and all([ len(i) == 2 and isinstance(i[0], int) and isinstance(i[1], int) and i[0] >= 0 and i[1] >= 0 for i in box ]):
+	def intersect(self, box: list):
+		if isinstance(box, list):
+			if len(box) == 2 and all([ len(i) == 2 and isinstance(i[0], int) and isinstance(i[1], int) for i in box ]):
 
-						positions = [ box[0], box[1], (box[0][0], box[1][1]), (box[1][0], box[0][1]) ]
-						x, y = mouse_position
+				mx, my = self.position
+				mx_left, my_up, mx_right, my_down = mx-self.radius, my-self.radius, mx+self.radius, my+self.radius
+				(bx_left, by_up), (bx_right, by_down) = box
 
-						for pos in positions:
-							if pos[0] in range(x - self.radius, x + self.radius) and pos[1] in range(y - self.radius, y + self.radius):
-								return True
+				# box more than cursor
+				if bx_left < mx_left <  bx_right or bx_left < mx_right <  bx_right: # if cursor x+radius or cursor x-radius is from box x[0] to box x[1]
+					if by_up < my_up <  by_down or by_up < my_down <  by_down: # if cursor y+radius or cursor y-radius is from boy y[0] to boy y[1]
+						return True
 
-						return False
+				# cursor more than box
+				if mx_left < bx_left <  mx_right or mx_left < bx_right <  mx_right: # if box x[0] or box x[1] is from cursor x+radius or cursor x-radius
+					if my_up < by_up <  my_down or my_up < by_down <  my_down: # if boy y[0] or boy y[1] is from cursor y+radius or cursor y-radius
+						return True
 
-					else:
-						raise ValueError(f"'box' must be list with 2 positions ( 2 lists with 2 integers >= 0 ), like [ (0, 0), (1, 1) ], not {box}, {type(box)}")
-				else:
-					raise ValueError(f"'box' must be list with 2 positions ( 2 lists with 2 integers >= 0 ), like [ (0, 0), (1, 1) ], not {box}, {type(box)}")
+				return False
+
 			else:
-				raise ValueError(f"'mouse_position' must be list with 2 integers >= 0, like [0, 0], not {mouse_position} {type(mouse_position)}")
+				raise ValueError(f"'box' must be list with 2 positions ( 2 lists with 2 integers >= 0 ), like [ (0, 0), (1, 1) ], not {box}, {type(box)}")
 		else:
-			raise ValueError(f"'mouse_position' must be list with 2 integers >= 0, like [0, 0], not {mouse_position} {type(mouse_position)}")
+			raise ValueError(f"'box' must be list with 2 positions ( 2 lists with 2 integers >= 0 ), like [ (0, 0), (1, 1) ], not {box}, {type(box)}")
 
 	def set_window(self, root: Union[Tk, Toplevel]):
 		if self.image:

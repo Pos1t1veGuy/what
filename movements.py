@@ -25,9 +25,7 @@ exc_msg=f"Movement.positions kwarg must be list or tuple of integer positions, l
             if isinstance(positions[0], int) and isinstance(positions[1], int):
                 self.positions = [positions]
             else:
-                raise ValueError(
-f"Movement.positions kwarg must be list or tuple of integer positions, like [ (0, 0), (0, 0) ] or one position, like [0, 0], not {positions} {type(positions)}"
-                    )
+                self.positions = positions
         else:
             self.positions = positions
 

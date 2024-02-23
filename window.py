@@ -14,8 +14,11 @@ from .movements import Movement
 class Window: # it is child window
 	def __init__(self, movements: Union[ List[Tuple[int, int]], list ], size: List[int], cycle: bool = False, repeat: int = -1,
 		always_on_top: bool = True, show_frame: bool = False, alpha: float = 1.0, transparent_color: str = None, bg_color: str = "black",
-		spawn_time: int = 0, alive_time: int = None, rhythm: int = None, on_rhythm: list = [], media: Media = None,
-		hitbox: list = [], click_button: str = 'left', on_mouse_in_hitbox: list = [], on_click: list = [], on_mouse_hitbox_click: list = []):
+		spawn_time: int = 0, alive_time: int = None, rhythm: int = None, on_rhythm: list = [],
+		media: Media = None, media_label_args: list = [], media_label_kwargs: dict = {'relx': 0.5, 'rely': 0.5, 'anchor': 'center'},
+		hitbox: list = [], click_button: str = 'left',
+		on_mouse_in_hitbox: list = [], on_mouse_hitbox_click: list = [], on_mouse_not_in_hitbox: list = [], on_mouse_not_in_hitbox_click: list = [],
+		on_click: list = [], bg_func: Callable = None):
 		'''
 		movements: list of the positions or Command object, it change position after every screen update
 		cycle: it may move endlessly
@@ -80,6 +83,8 @@ class Window: # it is child window
 
 		self.alive_time = 0
 		self.position = [0,0]
+		self.media_label_kwargs = media_label_kwargs
+		self.media_label_args = media_label_args
 
 		check_value(hitbox, [list, tuple], exc_msg=f"Window.hitbox kwarg must be list or tuple of 2 positions, like [ (0, 0), (1, 1) ], not {hitbox} {type(hitbox)}")
 		if len(hitbox) == 2:
@@ -96,8 +101,11 @@ class Window: # it is child window
 			self.hitbox = []
 
 		self.on_hitbox = on_mouse_in_hitbox
-		self.on_mouse_hitbox = on_mouse_hitbox_click
+		self.on_mouse_not_hitbox = on_mouse_not_in_hitbox
+		self.on_hitbox_click = on_mouse_hitbox_click
+		self.on_not_hitbox_click = on_mouse_not_in_hitbox_click
 		self.on_click = on_click
+		self.bg_func = bg_func
 
 		self.screen_width = None
 		self.screen_height = None
@@ -128,6 +136,12 @@ class Window: # it is child window
 	def update(self, parent_timeline, fps: int, cursor):
 # returns true if this window is dead, do not use Window.update before Window.root loads ( to load Window.root use Window.set_window(tkinter.TopLevel) )
 		start_time = time.time()
+
+		if self.name == 0:
+			print(self.position)
+
+		if callable(self.bg_func):
+			self.bg_func(self)
 
 		if self.pause > 0:
 			self.pause -= 1/fps
@@ -195,10 +209,10 @@ You must:
 		self.root.geometry(f"{self.default_size[0]}x{self.default_size[1]}")
 
 		if self.media:
-			self.image_label = Label(self.root)
-			self.image_label.place(relx=0.5, rely=0.5, anchor="center")
+			self.media_label = Label(self.root, borderwidth=0, background="black", highlightthickness=0)
+			self.media_label.place(*self.media_label_args, **self.media_label_kwargs)
 			
-			self.media.set_label(self.image_label)
+			self.media.set_label(self.media_label)
 
 		self.root.wm_attributes("-topmost", self.always_on_top)
 		self.root.overrideredirect(not self.show_frame)
@@ -210,7 +224,7 @@ You must:
 		self.screen_height = self.root.winfo_screenheight()
 
 		if self.transparent_color:
-			self.root.wm_attributes("-transparentcolor", transparent_color)
+			self.root.wm_attributes("-transparentcolor", self.transparent_color)
 
 		self.root.title("Child Window")
 		self.root.attributes('-alpha', .0)
@@ -220,8 +234,22 @@ You must:
 		self.media.resize(x, y)
 
 	def resize_window(self, x: int, y: int):
-		self.root.geometry(f"{x}x{y}")
-		self.size = [x,y]
+		args = [x,y]
+		res = []
+		for i, num in enumerate(args):
+			if isinstance(num, str):
+				new = eval(f'self.size[{i}]{num}')
+				if new < 0 and isinstance(new, int):
+					raise ValueError(
+f"{self.adress}{['x','y'][i]} argument must be integer number greater than 0 or relaitive string number like '+100' or '-30'. Used relative and gets negative from current window size {self.size}"
+						)
+				else:
+					res.append(new)
+			else:
+				res.append(num)
+
+		self.root.geometry(f"{res[0]}x{res[1]}")
+		self.size = res
 
 	def mouse_listener(self, cursor):
 		if cursor.position:
@@ -229,26 +257,33 @@ You must:
 			x = absolute_x - self.position[0]
 			y = absolute_y - self.position[1]
 
-			is_in_window = cursor.intersect([absolute_x, absolute_y], [ self.position, (self.position[0] + self.size[0], self.position[1] + self.size[1]) ])
+			if callable(self.on_click):
+				self.command(self.on_click)
 
-			if is_in_window:
-				if callable(self.on_click):
-					self.command(self.on_click)
+			if self.hitbox:
+				is_in_hitbox = cursor.intersect([
+					(self.position[0] + self.hitbox[0][0], self.position[1] + self.hitbox[0][1]),
+					(self.position[0] + self.hitbox[1][0], self.position[1] + self.hitbox[1][1])
+					])
 
-				if self.hitbox:
-					is_in_hitbox = cursor.intersect([absolute_x, absolute_y], [
-						(self.position[0] + self.hitbox[0][0], self.position[1] + self.hitbox[0][1]),
-						(self.position[0] + self.hitbox[1][0], self.position[1] + self.hitbox[1][1])
-						])
-
-					if is_in_hitbox:
-						if isinstance(self.on_hitbox, list) and isinstance(self.on_hitbox[0], str):
+				if is_in_hitbox:
+					if isinstance(self.on_hitbox, list) and len(self.on_hitbox):
+						if isinstance(self.on_hitbox[0], str):
 							self.command(self.on_hitbox)
-						elif callable(self.on_hitbox):
-							self.command(self.on_hitbox(self))
+					elif callable(self.on_hitbox):
+						self.on_hitbox(self)
 
-						if cursor.pressed_button and callable(self.on_mouse_hitbox):
-							self.command(self.on_mouse_hitbox)
+					if cursor.pressed_button and callable(self.on_hitbox_click):
+						self.on_hitbox_click(self)
+				else:
+					if isinstance(self.on_mouse_not_hitbox, list) and len(self.on_mouse_not_hitbox):
+						if isinstance(self.on_mouse_not_hitbox[0], str):
+							self.command(self.on_mouse_not_hitbox)
+					elif callable(self.on_mouse_not_hitbox):
+						self.on_mouse_not_hitbox(self)
+
+					if cursor.pressed_button and callable(self.on_not_hitbox_click):
+						self.on_not_hitbox_click(self)
 
 	def command(self, command: Union[List[list], Callable], rhythm: bool = False):
 		if command:
@@ -300,43 +335,13 @@ f"{self.adress}Invalid command at Window.on_rhythm[{self.on_rhythm_index}]: {sel
 
 		if cmd == 'resize':
 			if len(args) >= 2:
-
-				res = []
-				for i, num in enumerate(args):
-					if isinstance(num, str):
-						new = eval(f'self.size[{i}]{num}')
-						if new < 0:
-							raise ValueError(
-f"{self.adress}{['x','y'][i]} argument must be integer number greater than 0 or relaitive string number like '+100' or '-30'. Used relative and gets negative from current window size {self.size}"
-								)
-						else:
-							res.append(new)
-					else:
-						res.append(num)
-
-				self.resize( int(res[0]), int(res[1]) )
-
+				self.resize(args[0], args[1])
 			else:
 				raise ValueError(f"{self.adress}Command.window.resize must contains 2 integer arguments more than 0, not {args}")
 
 		elif cmd == 'resize_window':
 			if len(args) >= 2:
-
-				res = []
-				for i, num in enumerate(args):
-					if isinstance(num, str):
-						new = eval(f'self.size[{i}]{num}')
-						if new < 0:
-							raise ValueError(
-f"{self.adress}{['x','y'][i]} argument must be integer number greater than 0 or relaitive string number like '+100' or '-30'. Used relative and gets negative from current window size {self.size}"
-								)
-						else:
-							res.append(new)
-					else:
-						res.append(num)
-
-				self.resize_window( int(res[0]), int(res[1]) )
-
+				self.resize_window(args[0], args[1])
 			else:
 				raise ValueError(f"{self.adress}Command.window.resize must contains 2 integer arguments more than 0, not {args}")
 
@@ -360,7 +365,9 @@ f"{self.adress}{['x','y'][i]} argument must be integer number greater than 0 or 
 
 		elif cmd == 'set_media':
 			if len(args) >= 1:
-				self.media = args[0]
+				if self.media != args[0]:
+					self.media = args[0]
+					self.media.set_label(self.media_label)
 			else:
 				raise ValueError(f"{self.adress}Command.media.set must contains 1 Media argument, not {args}")
 

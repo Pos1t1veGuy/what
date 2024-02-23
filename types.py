@@ -86,11 +86,8 @@ class Command:
 			res += [Command.media.resize( f'-{speed}', f'-{speed}' if speed >= 0 else f'+{speed*-1}' )] * floor(delta/2)
 			return res
 
-		def set(media: str) -> list: # better use preloaded and resized PIL.Image instead of string image path
-			if isinstance(media, str) or isinstance(media, Image.Image):
-				return ["set_media", media]
-			else:
-				raise ValueError(f"media must be string path to media file or PIL.Image object, not '{media}', {type(media)}")
+		def set(media) -> list: # better use preloaded and resized PIL.Image instead of string image path
+			return ["set_media", media]
 
 		def rotate(angle: int) -> list:
 			if isinstance(angle, int):
@@ -112,7 +109,9 @@ class Command:
 
 class Media:
 	class Image:
-		def __init__(self, image: Union[str, Image], size: Union[list, tuple] = [], angle: int = 0):
+		def __init__(self, image: Union[str, Image], angle: int = 0,
+			size: Union[list, tuple] = [], resize_max: Union[list, tuple] = [], resize_min: Union[list, tuple] = []
+			):
 			
 			if isinstance(image, str):
 				self.image = Image.open(image)
@@ -123,8 +122,9 @@ class Media:
 			self.default_image = self.image
 
 			if size:
-				if isinstance(size, list) or isinstance(size, tuple):
-					if len(size) == 2 and isinstance(size[0], int) and isinstance(size[0], int) and size[0] > 0 and size[1] > 0:
+				check_value(size, [list, tuple], exc_msg=f"'size' kwarg must be list or tuple of 2 integers more than 0, not {size} {type(size)})")
+				if len(size) == 2:
+					if isinstance(size[0], int) and isinstance(size[1], int) and size[0] > 0 and size[1] > 0:
 						self.size = size
 						self.image = self.image.resize(size)
 					else:
@@ -135,12 +135,34 @@ class Media:
 				self.size = None
 			self.default_resized_image = self.image
 
-			if isinstance(angle, int):
-				self.angle = angle
-				self.image = self.image.rotate(angle)
-			else:
-				raise ValueError(f"'angle' kwarg must be integer, not {angle} {type(angle)})")
+			check_value(angle, int, exc_msg=f"'angle' kwarg must be integer, not {angle} {type(angle)})")
+			self.angle = angle
+			self.image = self.image.rotate(angle)
 			self.default_rotated_image = self.image
+
+			if resize_max:
+				check_value(resize_max, [list, tuple], exc_msg=f"'resize_max' kwarg must be list or tuple of 2 integers more than 0, not {resize_max} {type(resize_max)})")
+				if len(resize_max) == 2:
+					if isinstance(resize_max[0], int) and isinstance(resize_max[1], int) and resize_max[0] > 0 and resize_max[1] > 0:
+						self.resize_max = resize_max
+					else:
+						raise ValueError(f"'resize_max' kwarg must be list or tuple of 2 integers more than 0, not {resize_max} {type(resize_max)})")
+				else:
+					raise ValueError(f"'resize_max' kwarg must be list or tuple of 2 integers more than 0, not {resize_max} {type(resize_max)})")
+			else:
+				self.resize_max = None
+
+			if resize_min:
+				check_value(resize_min, [list, tuple], exc_msg=f"'resize_min' kwarg must be list or tuple of 2 integers more than 0, not {resize_min} {type(resize_min)})")
+				if len(resize_min) == 2:
+					if isinstance(resize_min[0], int) and isinstance(resize_min[1], int) and resize_min[0] > 0 and resize_min[1] > 0:
+						self.resize_min = resize_min
+					else:
+						raise ValueError(f"'resize_min' kwarg must be list or tuple of 2 integers more than 0, not {resize_min} {type(resize_min)})")
+				else:
+					raise ValueError(f"'resize_min' kwarg must be list or tuple of 2 integers more than 0, not {resize_min} {type(resize_min)})")
+			else:
+				self.resize_min = None
 
 			self.photo = None
 			self.label = None
@@ -155,7 +177,12 @@ class Media:
 			for i, num in enumerate([x,y]):
 				if isinstance(num, int):
 					if num > 0:
-						res.append(num)
+						if num > self.resize_max[i]:
+							res.append(self.resize_max[i])
+						elif num < self.resize_min[i]:
+							res.append(self.resize_min[i])
+						else:
+							res.append(num)
 					else:
 						raise ValueError(f"'{['x', 'y'][i]}' must be integer more than 0 or relative string number like '+100' or '-30', not {num} {type(num)}")
 
@@ -164,7 +191,12 @@ class Media:
 						new = eval(f"self.size[i]{num}")
 
 						if new > 0:
-							res.append(new)
+							if new > self.resize_max[i]:
+								res.append(self.resize_max[i])
+							elif new < self.resize_min[i]:
+								res.append(self.resize_min[i])
+							else:
+								res.append(new)
 						else:
 							raise ValueError(f"'{['x', 'y'][i]}' relative string number must returns integer more than 0, not {new} {type(new)}")
 					else:
@@ -172,7 +204,7 @@ class Media:
 				
 				else:
 					raise ValueError(f"'{['x', 'y'][i]}' must be integer more than 0 or relative string number like '+100' or '-30', not {num} {type(num)}")
-			
+
 			self.size = res
 			self.image = self.default_rotated_image.resize(self.size)
 			self.default_rotated_image = self.image
