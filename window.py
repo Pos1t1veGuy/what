@@ -36,48 +36,48 @@ class Window: # it is child window
 		self.root = None # Window.root will be loaded after use Window.set_window(tkinter.TopLevel)
 		self.media = media
 
-		check_value(movements, [list, Movement], exc_msg=f"Window.movements kwarg must be list, not {movements} {type(movements)}")
+		check_value(movements, [list, Movement], exc_msg=f"'movements' constructor kwarg must be list, not {movements} {type(movements)}")
 		self.movements = movements
 
-		check_value(cycle, [bool, int], exc_msg=f"Window.cycle kwarg must be bool, not {cycle} {type(cycle)}")
+		check_value(cycle, [bool, int], exc_msg=f"'cycle' constructor kwarg must be bool, not {cycle} {type(cycle)}")
 		self.cycle = bool(cycle)
 
-		check_value(repeat, int, exc_msg=f"Window.repeat kwarg must be integer more than 0, not {repeat} {type(repeat)}")
+		check_value(repeat, int, exc_msg=f"'repeat' constructor kwarg must be integer > 0, not {repeat} {type(repeat)}")
 		if repeat == -1:
 			self.repeat = repeat
 		else:
 			self.repeat = repeat-1
 
-		check_value(size, list, exc_msg=f"Window.size kwarg must be list of 2 integers more than 0, not {size} {type(size)}")
+		check_value(size, list, exc_msg=f"'size' constructor kwarg must be list of 2 integers > 0, not {size} {type(size)}")
 		if len(size) == 2:
 			if isinstance(size[0], int) and isinstance(size[1], int) and size[0] > 0 and size[1] > 0:
 				self.size = size
 			else:
-				raise ValueError(f"Window.size kwarg must be list of 2 integers more than 0, not {size} {type(size)}")
+				raise ValueError(f"'size' constructor kwarg must be list of 2 integers > 0, not {size} {type(size)}")
 		else:
-			raise ValueError(f"Window.size kwarg must be list of 2 integers more than 0, not {size} {type(size)}")
+			raise ValueError(f"'size' constructor kwarg must be list of 2 integers > 0, not {size} {type(size)}")
 
-		check_value(spawn_time, int, exc_msg=f"Window.spawn_time kwarg must be integer more than 0, not {spawn_time} {type(spawn_time)}")
+		check_value(spawn_time, int, exc_msg=f"'spawn_time' constructor kwarg must be integer > 0, not {spawn_time} {type(spawn_time)}")
 		if spawn_time >= 0:
 			self.spawn_time = spawn_time
 		else:
-			raise ValueError(f"Window.spawn_time kwarg must be integer more than 0, not {spawn_time} {type(spawn_time)}")
+			raise ValueError(f"'spawn_time' constructor kwarg must be integer > 0, not {spawn_time} {type(spawn_time)}")
 
-		check_value(alive_time, [int, type(None)], exc_msg=f"Window.alive_time kwarg must be integer more than 0, not {alive_time} {type(alive_time)}")
+		check_value(alive_time, [int, type(None)], exc_msg=f"Window 'alive_time' kwarg of constructor must be integer > 0, not {alive_time} {type(alive_time)}")
 		if alive_time != None:
 			if alive_time > 0:
 				self.max_alive_time = alive_time
 			else:
-				raise ValueError(f"Window.alive_time kwarg must be integer more than 0, not {alive_time} {type(alive_time)}")
+				raise ValueError(f"'alive_time' constructor kwarg must be integer > 0, not {alive_time} {type(alive_time)}")
 		else:
 			self.max_alive_time = None
 
-		check_value(rhythm, [int, type(None)], exc_msg=f"Window.rhythm kwarg must be integer more than 0, not {rhythm} {type(rhythm)}")
+		check_value(rhythm, [int, type(None)], exc_msg=f"'rhythm' constructor kwarg must be integer > 0, not {rhythm} {type(rhythm)}")
 		if rhythm:
 			if rhythm > 0:
 				self.rhythm = rhythm
 			else:
-				raise ValueError(f"Window.rhythm kwarg must be integer more than 0, not {rhythm} {type(rhythm)}")
+				raise ValueError(f"'rhythm' constructor kwarg must be integer > 0, not {rhythm} {type(rhythm)}")
 		else:
 			self.rhythm = None
 
@@ -86,17 +86,17 @@ class Window: # it is child window
 		self.media_label_kwargs = media_label_kwargs
 		self.media_label_args = media_label_args
 
-		check_value(hitbox, [list, tuple], exc_msg=f"Window.hitbox kwarg must be list or tuple of 2 positions, like [ (0, 0), (1, 1) ], not {hitbox} {type(hitbox)}")
+		check_value(hitbox, [list, tuple], exc_msg=f"'hitbox' constructor kwarg must be list or tuple of 2 positions, like [ (0, 0), (1, 1) ], not {hitbox} {type(hitbox)}")
 		if len(hitbox) == 2:
-			check_value(hitbox[0], [list, tuple], exc_msg=f"Window.hitbox kwarg must be list or tuple of 2 positions ( with only integers ), like [ (0, 0), (1, 1) ], not {hitbox} {type(hitbox)}")
-			check_value(hitbox[1], [list, tuple], exc_msg=f"Window.hitbox kwarg must be list or tuple of 2 positions ( with only integers ), like [ (0, 0), (1, 1) ], not {hitbox} {type(hitbox)}")
-			if len(hitbox[0]) == 2 and len(hitbox[1]) == 2:
+			check_value(hitbox[0], [list, tuple], exc_msg=f"'hitbox' constructor kwarg must be list or tuple of 2 positions ( with only integers ), like [ (0, 0), (1, 1) ], not {hitbox} {type(hitbox)}")
+			check_value(hitbox[1], [list, tuple], exc_msg=f"'hitbox' constructor kwarg must be list or tuple of 2 positions ( with only integers ), like [ (0, 0), (1, 1) ], not {hitbox} {type(hitbox)}")
+			if len(hitbox[0]) == len(hitbox[1]) == 2:
 				if isinstance(hitbox[0][0], int) and isinstance(hitbox[0][1], int) and isinstance(hitbox[1][0], int) and isinstance(hitbox[0][1], int):
 					self.hitbox = hitbox
 				else:
-					raise ValueError(f"Window.hitbox kwarg must be list or tuple of 2 positions ( with only integers ), like [ (0, 0), (1, 1) ], not {hitbox} {type(hitbox)}")
+					raise ValueError(f"'hitbox' constructor kwarg must be list or tuple of 2 positions ( with only integers ), like [ (0, 0), (1, 1) ], not {hitbox} {type(hitbox)}")
 			else:
-				raise ValueError(f"Window.hitbox kwarg must be list or tuple of 2 positions ( with only integers ), like [ (0, 0), (1, 1) ], not {hitbox} {type(hitbox)}")
+				raise ValueError(f"'hitbox' constructor kwarg must be list or tuple of 2 positions ( with only integers ), like [ (0, 0), (1, 1) ], not {hitbox} {type(hitbox)}")
 		else:
 			self.hitbox = []
 
@@ -110,9 +110,9 @@ class Window: # it is child window
 		self.screen_width = None
 		self.screen_height = None
 
-		check_value(always_on_top, [bool, int], exc_msg=f"Window.always_on_top kwarg must be bool, not {always_on_top} {type(always_on_top)}")
+		check_value(always_on_top, [bool, int], exc_msg=f"'always_on_top' constructor kwarg must be bool, not {always_on_top} {type(always_on_top)}")
 		self.always_on_top = always_on_top
-		check_value(show_frame, [bool, int], exc_msg=f"Window.show_frame kwarg must be bool, not {show_frame} {type(show_frame)}")
+		check_value(show_frame, [bool, int], exc_msg=f"'show_frame' constructor kwarg must be bool, not {show_frame} {type(show_frame)}")
 		self.show_frame = show_frame
 		self.transparent_color = transparent_color
 		self.bg_color = bg_color
@@ -136,9 +136,6 @@ class Window: # it is child window
 	def update(self, parent_timeline, fps: int, cursor):
 # returns true if this window is dead, do not use Window.update before Window.root loads ( to load Window.root use Window.set_window(tkinter.TopLevel) )
 		start_time = time.time()
-
-		if self.name == 0:
-			print(self.position)
 
 		if callable(self.bg_func):
 			self.bg_func(self)
@@ -200,7 +197,7 @@ You must:
 				else:
 					return False
 			else:
-				raise AttributeError(f'{self.adress}Child window "Window.root" did not configured')
+				raise AttributeError(f'{self.adress}Child tkinter window "Window.root" did not configured')
 		return True
 
 	def set_window(self, root: Union[Tk, Toplevel]):
@@ -241,7 +238,7 @@ You must:
 				new = eval(f'self.size[{i}]{num}')
 				if new < 0 and isinstance(new, int):
 					raise ValueError(
-f"{self.adress}{['x','y'][i]} argument must be integer number greater than 0 or relaitive string number like '+100' or '-30'. Used relative and gets negative from current window size {self.size}"
+f"{self.adress}Window.resize_window takes 2 arguments: integers > 0 or relaitive string numbers like '+100' or '-30'. Used relative and gets negative from current window size {self.size}"
 						)
 				else:
 					res.append(new)
@@ -337,13 +334,13 @@ f"{self.adress}Invalid command at Window.on_rhythm[{self.on_rhythm_index}]: {sel
 			if len(args) >= 2:
 				self.resize(args[0], args[1])
 			else:
-				raise ValueError(f"{self.adress}Command.window.resize must contains 2 integer arguments more than 0, not {args}")
+				raise ValueError(f"{self.adress}Command.window.resize takes 2 integers > 0, not {args} {type(args)}")
 
 		elif cmd == 'resize_window':
 			if len(args) >= 2:
 				self.resize_window(args[0], args[1])
 			else:
-				raise ValueError(f"{self.adress}Command.window.resize must contains 2 integer arguments more than 0, not {args}")
+				raise ValueError(f"{self.adress}Command.window.resize takes 2 integers > 0, not {args} {type(args)}")
 
 		elif cmd == 'resize_media':
 			if not self.media:
@@ -352,7 +349,7 @@ f"{self.adress}Invalid command at Window.on_rhythm[{self.on_rhythm_index}]: {sel
 			if len(args) >= 2:
 				self.media.resize(*args)
 			else:
-				raise ValueError(f"{self.adress}Command.media.resize must contains 2 integer arguments more than 0, not {args}")
+				raise ValueError(f"{self.adress}Command.media.resize takes 2 integers > 0, not {args} {type(args)}")
 
 		elif cmd == 'rotate_media':
 			if not self.media:
@@ -361,7 +358,7 @@ f"{self.adress}Invalid command at Window.on_rhythm[{self.on_rhythm_index}]: {sel
 			if len(args) >= 1:
 				self.media.rotate(args[0])
 			else:
-				raise ValueError(f"{self.adress}Command.media.rotate must contains 1 integer arguments more than 0, not {args}")
+				raise ValueError(f"{self.adress}Command.media.rotate takes an integer > 0, not {args} {type(args)}")
 
 		elif cmd == 'set_media':
 			if len(args) >= 1:
@@ -369,17 +366,17 @@ f"{self.adress}Invalid command at Window.on_rhythm[{self.on_rhythm_index}]: {sel
 					self.media = args[0]
 					self.media.set_label(self.media_label)
 			else:
-				raise ValueError(f"{self.adress}Command.media.set must contains 1 Media argument, not {args}")
+				raise ValueError(f"{self.adress}Command.media.set takes a Media, not {args} {type(args)}")
 
 		elif cmd == 'wait':
 			check_value(args[0], [int, float],
-exc_msg=f"{self.adress}Invalid string command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. 'time' argument must be integer or float > 0 or -1 ( endless )"
+exc_msg=f"{self.adress}Invalid string command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. Command.wait takes an integer or float > 0 ( or -1 if it should be endless )"
 				)
 			if args[0] > 0 or args[0] == -1:
 				self.pause = args[0]
 			else:
 				raise ValueError(
-f"{self.adress}Invalid string command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. 'time' argument must be integer or float > 0 or -1 ( endless )"
+f"{self.adress}Invalid string command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. Command.wait takes an integer or float > 0 ( or -1 if it should be endless )"
 					)
 
 	def step(self):

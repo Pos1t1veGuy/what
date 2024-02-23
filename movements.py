@@ -19,7 +19,7 @@ def quadratic_y(distance: int, a: int = 1, b: int = 0, c: int = 1, step: int = 1
 class Movement:
     def __init__(self, positions: list = []):
         check_value(positions, [list, tuple],
-exc_msg=f"Movement.positions kwarg must be list or tuple of integer positions, like [ (0, 0), (0, 0) ] or one position, like [0, 0], not {positions} {type(positions)}"
+exc_msg=f"'positions' constructor kwarg must be list or tuple of integer positions, like [ (0, 0), (0, 0) ] or one position, like [0, 0], not {positions} {type(positions)}"
             )
         if len(positions) == 2:
             if isinstance(positions[0], int) and isinstance(positions[1], int):
@@ -60,7 +60,7 @@ exc_msg=f"Movement.positions kwarg must be list or tuple of integer positions, l
                             self.positions.append( (last_x + pos[0], last_y + pos[1]) )
             else:
                 raise ValueError(
-f"Movement.positions kwarg must be list or tuple of integer positions, like [ (0, 0), (0, 0) ] or one position, like [0, 0], not {positions} {type(positions)}"
+f"'positions' constructor kwarg must be list or tuple of integer positions, like [ (0, 0), (0, 0) ] or one position, like [0, 0], not {positions} {type(positions)}"
                     )
 
         return self

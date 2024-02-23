@@ -39,7 +39,7 @@ class Area: # main window
 		self.pause_label = Label(self.root, text="PAUSED", font=("Arial", 34), bg="black", fg="white")
 		self.pause_label.place(relx=0.5, rely=0.5, anchor="center")
 		self.pause_label.place_forget()
-		check_value(cursor_circle_radius, int, exc_msg=f"'cursor_circle_radius' kwarg must be integer >= 0, not {cursor_circle_radius} {type(cursor_circle_radius)}")
+		check_value(cursor_circle_radius, int, exc_msg=f"'cursor_circle_radius' constructor kwarg must be integer >= 0, not {cursor_circle_radius} {type(cursor_circle_radius)}")
 		self.cursor_circle_radius = cursor_circle_radius
 
 		if media:
@@ -70,11 +70,11 @@ class Area: # main window
 		self.root.overrideredirect(1)
 		self.root.configure(bg="black")
 
-		check_value(alpha, [int, float], exc_msg=f"'alpha' kwarg must be integer of float from 0 to 1, not {alpha} {type(alpha)}")
+		check_value(alpha, [int, float], exc_msg=f"'alpha' constructor kwarg must be integer of float from 0 to 1, not {alpha} {type(alpha)}")
 		self.alpha = alpha
 		self.alive_time = 0
 		self.stopping = False
-		check_value(bg_always_on_top, [int, bool], exc_msg=f"'bg_always_on_top' kwarg must be bool, not {bg_always_on_top} {type(bg_always_on_top)}")
+		check_value(bg_always_on_top, [int, bool], exc_msg=f"'bg_always_on_top' constructor kwarg must be bool, not {bg_always_on_top} {type(bg_always_on_top)}")
 		self.bg_always_on_top = bg_always_on_top
 
 		self.bg_func = bg_func
@@ -99,7 +99,7 @@ class Area: # main window
 			self.root.wm_attributes("-topmost", 1)
 
 	def set_timelines(self, timelines: list):
-		check_value(timelines, [tuple, list], exc_msg=f"'timelines' arg must be list of TimeLine objects, not {timelines} {type(timelines)}")
+		check_value(timelines, [tuple, list], exc_msg=f"Area.set_timelines takes a list of TimeLine objects, not {timelines} {type(timelines)}")
 		self.timelines = timelines
 
 		for i, timeline in enumerate(self.timelines):
@@ -224,7 +224,7 @@ class Area: # main window
 				self.root.attributes('-alpha', alpha)
 				self.on_set_alpha_tl = self.timeline_index
 			else:
-				raise ValueError(f"'alpha' must be float or integer from 0 to 1, not {alpha} {type(alpha)}")
+				raise ValueError(f"Area.set_alpha takes a float or an integer from 0 to 1, not {alpha} {type(alpha)}")
 
 		elif isinstance(alpha, str):
 			if alpha[0] in ['-', '+'] and ( alpha[1:].isdigit() or is_float(alpha[1:]) ):
@@ -239,7 +239,7 @@ class Area: # main window
 
 				self.root.attributes('-alpha', self.alpha)
 			else:
-				raise ValueError(f"'alpha' must be integer number more than 0 or relative string number like '+100' or '-30', not {alpha} {type(alpha)}")
+				raise ValueError(f"Area.set_alpha takes an integer, a float from 0 to 1 or a relative string numbers like '+100' or '-30', not {alpha} {type(alpha)}")
 
 	def check_keyboard(self): # logs keystrokes
 		while 1:
@@ -318,7 +318,7 @@ class TimeLine: # it is a scene where contain child windows, you may use several
 						self.moments[sec] = 'done'
 					else:
 						raise ValueError(
-f"'moments' kwarg at TimeLine constructor must be dict with integer keys and callable or list of callable values ( functions must takes 2 arguments: fps, cursor )"
+f"'moments' constructor kwarg must be dict with integer keys and callable values or list of callable values ( functions must takes 2 arguments: cursor )"
 							)
 
 			if self.alive_time >= self.wait_time:
@@ -349,7 +349,7 @@ class Cursor:
 	def __init__(self, hp: int = 1, radius: int = 0, on_death = None,
 		image: Union[Image, str] = None, transparent_color: str = None, resize: List[[int, int]] = None, alpha: float = 1.0):
 		'''
-		radius: integer number, the "click zone" of cursor expands by this number in all directions. For example 1 gets rectangle 3x3 around cursor, 2 gets 5x5
+		radius: integer numbers, the "click zone" of cursor expands by this numbers in all directions. For example 1 gets rectangle 3x3 around cursor, 2 gets 5x5
 		image: string path to image or PIL.Image object, makes cursor with this image
 		transparent_color: string color name, like "black". If you indicated kwarg image, you can remove some color from it. If transparent_color="black" will be removed black color from image
 		resize: list with 2 integers. If you indicated kwarg image, you can resize cursor image
@@ -367,9 +367,9 @@ class Cursor:
 			if radius >= 0:
 				self.radius = radius
 			else:
-				raise ValueError(f"'radius' must be integer >= 0, not {radius} {type(radius)}")
+				raise ValueError(f"'radius' constructor kwarg must be integer >= 0, not {radius} {type(radius)}")
 		else:
-			raise ValueError(f"'radius' must be integer >= 0, not {radius} {type(radius)}")
+			raise ValueError(f"'radius' constructor kwarg must be integer >= 0, not {radius} {type(radius)}")
 
 		if isinstance(image, str):
 			self.image = Image.open(image)
@@ -389,9 +389,9 @@ class Cursor:
 				if resize[0] > 0 and resize[1] > 0:
 					self.image = self.image.resize(resize)
 				else:
-					raise ValueError(f"'resize' elements must be more than 0, not {resize}")
+					raise ValueError(f"'resize' constructor kwarg must be list of 2 integers > 0, not {resize} {type(resize)}")
 			else:
-				raise ValueError(f"'resize' must be list with 2 integers, not {resize}")
+				raise ValueError(f"'resize' constructor kwarg must be list of 2 integers > 0, not {resize} {type(resize)}")
 
 		self.position = None
 		self.pressed_button = None
@@ -421,9 +421,9 @@ class Cursor:
 				else:
 					self.hp = new
 			else:
-				raise ValueError(f"'new_hp' must be integer number greater than 0 or relative string number like '+100' or '-30', not {new_hp} {type(new_hp)}")
+				raise ValueError(f"Cursor.set_hp takes an integer > 0 or a relative string numbers like '+100' or '-30', not {new_hp} {type(new_hp)}")
 		else:
-			raise ValueError(f"'new_hp' must be integer number greater than 0 or relative string number like '+100' or '-30', not {new_hp} {type(new_hp)}")
+			raise ValueError(f"Cursor.set_hp takes an integer > 0 or a relative string numbers like '+100' or '-30', not {new_hp} {type(new_hp)}")
 
 	def set_alpha(self, alpha: Union[int, float], init: bool = False):
 		if isinstance(alpha, float) or isinstance(alpha, int):
@@ -432,7 +432,7 @@ class Cursor:
 				if not init:
 					self.root.attributes('-alpha', alpha)
 			else:
-				raise ValueError(f"'alpha' must be float or integer from 0 to 1 or relative string number like '+100' or '-30', not {alpha} {type(alpha)}")
+				raise ValueError(f"Cursor.set_alpha takes a float, an integer from 0 to 1 or a relative string numbers like '+100' or '-30', not {alpha} {type(alpha)}")
 
 		elif isinstance(alpha, str):
 			if alpha[0] in ['-', '+'] and ( alpha[1:].isdigit() or is_float(alpha[1:]) ):
@@ -448,10 +448,10 @@ class Cursor:
 				if not init:
 					self.root.attributes('-alpha', self.alpha)
 			else:
-				raise ValueError(f"'alpha' must be float or integer from 0 to 1 or relative string number like '+100' or '-30', not {alpha} {type(alpha)}")
+				raise ValueError(f"Cursor.set_alpha takes a float, an integer from 0 to 1 or a relative string numbers like '+100' or '-30', not {alpha} {type(alpha)}")
 
 		else:
-			raise ValueError(f"'alpha' must be float or integer from 0 to 1 or relative string number like '+100' or '-30', not {alpha} {type(alpha)}")
+			raise ValueError(f"Cursor.set_alpha takes a float, an integer from 0 to 1 or a relative string numbers like '+100' or '-30', not {alpha} {type(alpha)}")
 
 	def intersect(self, box: list):
 		if isinstance(box, list):
@@ -474,9 +474,9 @@ class Cursor:
 				return False
 
 			else:
-				raise ValueError(f"'box' must be list with 2 positions ( 2 lists with 2 integers >= 0 ), like [ (0, 0), (1, 1) ], not {box}, {type(box)}")
+				raise ValueError(f"Cursor.intersect takes a list with 2 positions ( 2 lists with 2 integers >= 0 ), like [ (0, 0), (1, 1) ], not {box}, {type(box)}")
 		else:
-			raise ValueError(f"'box' must be list with 2 positions ( 2 lists with 2 integers >= 0 ), like [ (0, 0), (1, 1) ], not {box}, {type(box)}")
+			raise ValueError(f"Cursor.intersect takes a list with 2 positions ( 2 lists with 2 integers >= 0 ), like [ (0, 0), (1, 1) ], not {box}, {type(box)}")
 
 	def set_window(self, root: Union[Tk, Toplevel]):
 		if self.image:
@@ -505,9 +505,9 @@ class Cursor:
 					self.image = self.image.resize(size)
 					self.root.geometry(f"{self.image.size[0]}x{self.image.size[1]}+{self.position[0]}+{self.position[1]}")
 				else:
-					raise ValueError(f"'resize' elements must be more than 0, not {size}")
+					raise ValueError(f"Cursor.resize takes an integer values must be > 0, not {size} {type(size)}")
 			else:
-				raise ValueError(f"'resize' must be list with 2 integers, not {size}")
+				raise ValueError(f"Cursor.resize takes a list with 2 integers, not {size} {type(size)}")
 
 	def update(self):
 		mouse_x, mouse_y = pag.position()
