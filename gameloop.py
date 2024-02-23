@@ -20,13 +20,12 @@ from .types import Media, check_value
 
 
 class Area: # main window
-	def __init__(self, cursor = None, bg_always_on_top: bool = False, minimize_windows: bool = True,
+	def __init__(self, cursor = None, bg_always_on_top: bool = False, minimize_windows: bool = True, moments: dict = {},
 		bg_func: Callable = None, on_death: Callable = None, on_start: Callable = None, cursor_circle_radius: int = 3,
 		on_tl_start: Callable = None, on_tl_death: Callable = None, on_click: Callable = None,
 		alpha: int = None, media: Media = None):
 
 		self.timelines = []
-		self.kb_thread_started = False
 		self.keyboard_thread = th(target=self.check_keyboard, daemon=True)
 		self.keyboard_thread.start()
 
@@ -35,6 +34,9 @@ class Area: # main window
 
 		self.root = Tk()
 		self.root.title("WHAT root")
+
+		check_value(moments, dict, f"'moments' constructor kwarg must be dict with integer keys and callable values or list of callable values ( functions must takes Cursor argument )")
+		self.moments = moments
 
 		self.pause_label = Label(self.root, text="PAUSED", font=("Arial", 34), bg="black", fg="white")
 		self.pause_label.place(relx=0.5, rely=0.5, anchor="center")
@@ -118,9 +120,6 @@ class Area: # main window
 		if self.alpha == None:
 			self.alpha = self.timelines[0].bg_alpha
 			self.root.attributes('-alpha', float(self.timelines[0].bg_alpha))
-
-		#while not self.kb_thread_started:
-			#time.sleep(0.3)
 
 		self.update()
 		self.root.mainloop()
@@ -281,12 +280,17 @@ class TimeLine: # it is a scene where contain child windows, you may use several
 		# objects: list of Window objects
 		# wait_time: delay time before start in seconds
 		self.name = 'independent_timeline'
+		check_value(objects, [tuple, list], exc_msg=f"'objects' constructor kwarg must be list of Window objects, not {objects} {type(objects)}")
 		self.objects = objects
+		check_value(bg_alpha, [int, float], exc_msg=f"'bg_alpha' constructor kwarg must be integer of float from 0 to 1, not {bg_alpha} {type(bg_alpha)}")
 		self.bg_alpha = bg_alpha
+		check_value(bg_realpha_speed, int, exc_msg=f"'bg_realpha_speed' constructor kwarg must be integer > 0, not {bg_realpha_speed} {type(bg_realpha_speed)}")
 		self.bg_realpha_speed = bg_realpha_speed
-		self.alive_time = 0
+		check_value(wait_time, int, exc_msg=f"'wait_time' constructor kwarg must be integer > 0, not {wait_time} {type(wait_time)}")
 		self.wait_time = wait_time
+		check_value(alive_time, int, exc_msg=f"'alive_time' constructor kwarg must be integer > 0 ( or -1 if it should be endless ), not {alive_time} {type(alive_time)}")
 		self.max_alive_time = alive_time
+		check_value(moments, dict, f"'moments' constructor kwarg must be dict with integer keys and callable values or list of callable values ( functions must takes Cursor argument )")
 		self.moments = moments
 
 		self.on_start = on_start
@@ -295,6 +299,7 @@ class TimeLine: # it is a scene where contain child windows, you may use several
 		self.initialized = False
 		self.started = False
 		self.dead = False
+		self.alive_time = 0
 
 	def update(self, fps: int, cursor): # returns true when every object is dead
 		start_time = time.time()
@@ -318,7 +323,7 @@ class TimeLine: # it is a scene where contain child windows, you may use several
 						self.moments[sec] = 'done'
 					else:
 						raise ValueError(
-f"'moments' constructor kwarg must be dict with integer keys and callable values or list of callable values ( functions must takes 2 arguments: cursor )"
+f"'moments' constructor kwarg must be dict with integer keys and callable values or list of callable values ( functions must takes Cursor argument )"
 							)
 
 			if self.alive_time >= self.wait_time:
@@ -363,11 +368,9 @@ class Cursor:
 		self.on_death = on_death
 		self.dead = False
 
-		if isinstance(radius, int):
-			if radius >= 0:
-				self.radius = radius
-			else:
-				raise ValueError(f"'radius' constructor kwarg must be integer >= 0, not {radius} {type(radius)}")
+		check_value(radius, int, exc_msg=f"'radius' constructor kwarg must be integer >= 0, not {radius} {type(radius)}")
+		if radius >= 0:
+			self.radius = radius
 		else:
 			raise ValueError(f"'radius' constructor kwarg must be integer >= 0, not {radius} {type(radius)}")
 
@@ -384,8 +387,11 @@ class Cursor:
 		self.alpha = 0
 		self.set_alpha(alpha, init=True)
 
-		if resize and isinstance(resize, list):
-			if len(resize) == 2 and isinstance(resize[0], int) and isinstance(resize[1], int):
+		if resize
+			check_value(resize, [list, tuple], f"'resize' constructor kwarg must be list of 2 integers > 0, not {resize} {type(resize)}")
+			if len(resize) == 2:
+				check_value(resize[0], int, f"'resize' constructor kwarg must be list of 2 integers > 0, not {resize} {type(resize)}")
+				check_value(resize[1], int, f"'resize' constructor kwarg must be list of 2 integers > 0, not {resize} {type(resize)}")
 				if resize[0] > 0 and resize[1] > 0:
 					self.image = self.image.resize(resize)
 				else:
@@ -454,27 +460,25 @@ class Cursor:
 			raise ValueError(f"Cursor.set_alpha takes a float, an integer from 0 to 1 or a relative string numbers like '+100' or '-30', not {alpha} {type(alpha)}")
 
 	def intersect(self, box: list):
-		if isinstance(box, list):
-			if len(box) == 2 and all([ len(i) == 2 and isinstance(i[0], int) and isinstance(i[1], int) for i in box ]):
+		check_value(box, [list, tuple], exc_msg=f"Cursor.intersect takes a list with 2 positions ( 2 lists with 2 integers >= 0 ), like [ (0, 0), (1, 1) ], not {box}, {type(box)}"):
+		if len(box) == 2 and all([ len(i) == 2 and isinstance(i[0], int) and isinstance(i[1], int) for i in box ]):
 
-				mx, my = self.position
-				mx_left, my_up, mx_right, my_down = mx-self.radius, my-self.radius, mx+self.radius, my+self.radius
-				(bx_left, by_up), (bx_right, by_down) = box
+			mx, my = self.position
+			mx_left, my_up, mx_right, my_down = mx-self.radius, my-self.radius, mx+self.radius, my+self.radius
+			(bx_left, by_up), (bx_right, by_down) = box
 
-				# box more than cursor
-				if bx_left < mx_left <  bx_right or bx_left < mx_right <  bx_right: # if cursor x+radius or cursor x-radius is from box x[0] to box x[1]
-					if by_up < my_up <  by_down or by_up < my_down <  by_down: # if cursor y+radius or cursor y-radius is from boy y[0] to boy y[1]
-						return True
+			# box more than cursor
+			if bx_left < mx_left <  bx_right or bx_left < mx_right <  bx_right: # if cursor x+radius or cursor x-radius is from box x[0] to box x[1]
+				if by_up < my_up <  by_down or by_up < my_down <  by_down: # if cursor y+radius or cursor y-radius is from boy y[0] to boy y[1]
+					return True
 
-				# cursor more than box
-				if mx_left < bx_left <  mx_right or mx_left < bx_right <  mx_right: # if box x[0] or box x[1] is from cursor x+radius or cursor x-radius
-					if my_up < by_up <  my_down or my_up < by_down <  my_down: # if boy y[0] or boy y[1] is from cursor y+radius or cursor y-radius
-						return True
+			# cursor more than box
+			if mx_left < bx_left <  mx_right or mx_left < bx_right <  mx_right: # if box x[0] or box x[1] is from cursor x+radius or cursor x-radius
+				if my_up < by_up <  my_down or my_up < by_down <  my_down: # if boy y[0] or boy y[1] is from cursor y+radius or cursor y-radius
+					return True
 
-				return False
+			return False
 
-			else:
-				raise ValueError(f"Cursor.intersect takes a list with 2 positions ( 2 lists with 2 integers >= 0 ), like [ (0, 0), (1, 1) ], not {box}, {type(box)}")
 		else:
 			raise ValueError(f"Cursor.intersect takes a list with 2 positions ( 2 lists with 2 integers >= 0 ), like [ (0, 0), (1, 1) ], not {box}, {type(box)}")
 
@@ -499,8 +503,11 @@ class Cursor:
 			self.image_label.pack()
 
 	def resize(self, size: List[[int, int]]):
-		if size and isinstance(size, list):
-			if len(size) == 2 and isinstance(size[0], int) and isinstance(size[1], int):
+		if size:
+			check_value(size, [list, tuple], exc_msg=f"Cursor.resize takes a list with 2 integers, not {size} {type(size)}")
+			if len(size) == 2:
+				check_value(size[0], int, f"'size' constructor kwarg must be list of 2 integers > 0, not {size} {type(size)}")
+				check_value(size[1], int, f"'size' constructor kwarg must be list of 2 integers > 0, not {size} {type(size)}")
 				if size[0] > 0 and size[1] > 0:
 					self.image = self.image.resize(size)
 					self.root.geometry(f"{self.image.size[0]}x{self.image.size[1]}+{self.position[0]}+{self.position[1]}")
