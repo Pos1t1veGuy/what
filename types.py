@@ -4,7 +4,7 @@ import itertools as it
 
 from tkinter import Label
 from PIL import Image, ImageTk
-from math import floor, ceil
+from math import floor, sqrt
 
 
 class Command:
@@ -310,3 +310,307 @@ def check_value(value, vtype, exc_msg: str = ''):
 		return True
 	else:
 		raise ValueError(exc_msg)
+
+
+# line between 2 points, it works with geometry math
+class Segment:
+	def __init__(self, from_pos: List[[int, int]], to_pos: List[[int, int]]):
+		check_value(from_pos, [tuple, list], exc_msg=f"'from_pos' constructor arg must be list or tuple of 2 integers, not {from_pos} {type(from_pos)}")
+		if len(from_pos) == 2 and all(isinstance(pos, int) for pos in from_pos):
+			self.from_pos = list(from_pos)
+		else:
+			raise ValueError(f"'from_pos' constructor arg must be list or tuple of 2 integers, not {from_pos} {type(from_pos)}")
+
+		check_value(to_pos, [tuple, list], exc_msg=f"'to_pos' constructor arg must be list or tuple of 2 integers, not {to_pos} {type(to_pos)}")
+		if len(to_pos) == 2 and all(isinstance(pos, int) for pos in to_pos):
+			self.to_pos = list(to_pos)
+		else:
+			raise ValueError(f"'to_pos' constructor arg must be list or tuple of 2 integers, not {to_pos} {type(to_pos)}")
+
+		self.k = Segment.get_k(from_pos, to_pos)
+		self.b = Segment.get_b(from_pos, to_pos)
+		self.length = round( sqrt( (from_pos[0] - to_pos[0])**2 + (from_pos[1] - to_pos[1])**2 ), 2 )
+
+		self.max_x, self.min_x = max(from_pos[0], to_pos[0]), min(from_pos[0], to_pos[0])
+		self.max_y, self.min_y = max(from_pos[1], to_pos[1]), min(from_pos[1], to_pos[1])
+
+	def intersects(self, object, return_count: bool = False) -> bool:
+		if isinstance(object, list):
+			res = self.intersects_point(object)
+			return int(res) if return_count else res
+		elif isinstance(object, Segment):
+			res = self.intersects_segment(object)
+			return int(res) if return_count else res
+		elif isinstance(object, HitPolygon):
+			return self.intersects_polygon(object, return_count=return_count)
+		else:
+			raise ValueError(f"Segment.intersects takes Segment/HitPolygon/HitBox object or list of 2 integers, not {object} {type(object)}")
+
+	def intersects_point(self, point: List[[int, int]]) -> bool:
+		if len(point) == 2 and all(isinstance(pos, int) for pos in point):
+			if self.k:
+				return float(point[1]) == self.k * point[0] + self.b and self.min_y <= point[1] <= self.max_y and self.min_x <= point[0] <= self.max_x
+			else:
+				return self.min_y <= point[1] <= self.max_y and self.min_x <= point[0] <= self.max_x
+		else:
+			raise ValueError(f"Segment.intersects_point takes a list or tuple of 2 integers, not {point} {type(point)}")
+
+	def intersects_segment(self, segment) -> bool:
+		if self.direction == 'horizontal':
+			return self.intersects_point([segment.max_x, self.max_y]) and segment.intersects_point([segment.max_x, self.max_y])
+		elif self.direction == 'vertical':
+			return self.intersects_point([self.max_x, segment.max_y]) and segment.intersects_point([self.max_x, segment.max_y])
+		elif self.k == segment.k:
+			return self.intersects_point(segment.from_pos) or self.intersects_point(segment.to_pos) or segment.intersects_point(self.from_pos) or segment.intersects_point(self.to_pos)
+		else:
+			x = (segment.b - self.b) / (self.k - segment.k)
+			y = self.k * x + self.b
+
+			if self.min_x <= x <= self.max_x and segment.min_x <= x <= segment.max_x:
+				if self.min_y <= y <= self.max_y and segment.min_y <= y <= segment.max_y:
+					return True
+
+		return False
+
+	def intersects_polygon(self, polygon, return_count: bool = False) -> bool:
+		count = 0
+		for segment in polygon.segments:
+			if self.intersects_segment(segment):
+				count += 1
+
+		return bool(count) if not return_count else count
+
+	def at_pos(self, position: List[[int, int]]):
+		check_value(position, [tuple, list], exc_msg=f"Segment.at_pos takes a list of 2 integers, not {position} {type(position)})")
+		
+		if len(position) == 2 and all(isinstance(pos, int) for pos in position):
+			new_from = (self.from_pos[0] + position[0], self.from_pos[1] + position[1])
+			new_to = (self.to_pos[0] + position[0], self.to_pos[1] + position[1])
+			return Segment(new_from, new_to)
+		else:
+			raise ValueError(f"Segment.at_pos takes a list of 2 integers, not {position} {type(position)})")
+
+	@staticmethod
+	def get_k(pos1: List[[int, int]], pos2: List[[int, int]]) -> int:
+		if pos1[0] == pos2[0]: # if it is vertical line
+			return 0
+		elif pos1[1] == pos2[1]: # if it is horizontal line
+			return 0
+		else:
+			return ( pos1[1] - pos2[1] ) / ( pos1[0] - pos2[0] )
+
+	@staticmethod
+	def get_b(pos1: List[[int, int]], pos2: List[[int, int]]) -> int:
+		if pos1[0] == pos2[0]: # if it is vertical line
+			return 0
+		elif pos1[1] == pos2[1]: # if it is horizontal line
+			return pos2[1]
+		else:
+			k = ( pos1[1] - pos2[1] ) / ( pos1[0] - pos2[0] )
+			return pos1[1] - k * pos1[0]
+
+	@property
+	def as_geometry(self) -> str:
+		if self.direction == 'vertical':
+			return f'x = {self.from_pos[0]}'
+		elif self.direction == 'horizontal':
+			return f'y = {self.from_pos[1]}'
+		else:
+			return f'y = { self.k if self.k != 1 else "" }x{ (f" + {self.b}" if self.b > 0 else f" - {-1*self.b}") if self.b else "" }'
+
+	@property
+	def direction(self) -> str:
+		if self.from_pos[0] == self.to_pos[0]: # y = num
+			return 'vertical'
+		elif self.from_pos[1] == self.to_pos[1]: # x = num
+			return 'horizontal'
+		else: # y = kx + b
+			return 'normal'
+
+	def __str__(self):
+		return f"Segment[{self.from_pos} -> {self.to_pos}]: ({self.as_geometry})"
+
+	def __repr__(self):
+		return f"Segment[{self.from_pos} -> {self.to_pos}]: ({self.as_geometry})"
+
+	def __call__(self, x: int):
+		return self.k * x + self.b
+
+	def __len__(self):
+		return self.length
+
+
+# like hitbox, but may be arbitrary figure with different vertices and different angles
+class HitPolygon:
+	def __init__(self, vertices: List[[ [int, int], [int, int], [int, int], [int, int] ]]):
+		check_value(vertices, [tuple, list], exc_msg=f"'vertices' constructor arg must be list or tuple of lists or tuples of 2 integers, not {vertices} {type(vertices)}")
+		if all([ isinstance(vertice, (list, tuple)) and len(vertice) == 2 for vertice in vertices ]):
+			if all([ all([ isinstance(pos, int) for pos in vertice ]) for vertice in vertices ]):
+				self.vertices = list(vertices)
+			else:
+				raise ValueError(f"'vertices' constructor arg must be (list or tuple) of (lists or tuples) of 2 integers, not {vertices} {type(vertices)}")
+		else:
+			raise ValueError(f"'vertices' constructor arg must be (list or tuple) of (lists or tuples) of 2 integers, not {vertices} {type(vertices)}")
+		
+		self.segments = []
+		self.position = [0, 0]
+		self.segment(vertices)
+
+	def segment(self, positions: list):
+		self.segments = []
+		res = []
+
+		for i in range(len( self.vertices )):
+		    res.append( Segment(self.vertices[i-1], self.vertices[i]) )
+
+		self.segments = res
+
+	def at_pos(self, position: List[[int, int]]):
+		self.position = position
+		new_vertices = []
+		for segment in self.segments:
+			new_vertices.append( segment.at_pos(position).from_pos )
+
+		return HitPolygon(new_vertices)
+
+	def intersects(self, object, return_count: bool = False) -> bool:
+		count = 0
+		if isinstance(object, list):
+			for segment in self.segments:
+				if segment.intersects_point(object):
+					count += 1
+
+		elif isinstance(object, Segment):
+			for segment in self.segments:
+				if segment.intersects_segment(object):
+					count += 1
+
+		elif isinstance(object, HitPolygon):
+			for first_segment in self.segments:
+				for second_segment in object.segments:
+					if first_segment.intersects_segment(second_segment):
+						count += 1
+
+		else:
+			raise ValueError(f"Segment.intersects takes Segment object, list of 2 integers or HitPolygon object, not {object} {type(object)}")
+
+		return bool(count) if not return_count else count
+
+	def segments_by_point(self, position: List[[int, int]]):
+		segments = []
+		for segment in self.segments:
+			if segment.intersects_point(position):
+				segments.append(segment)
+
+		return segments
+
+	def segments_by_fromto_point(self, position: List[[int, int]]):
+		segments = []
+		for segment in self.segments:
+			if position in [segment.from_pos, segment.to_pos]:
+				segments.append(segment)
+
+		return segments
+
+	def segment_by_from_point(self, position: List[[int, int]]):
+		for segment in self.segments:
+			if list(position) == segment.from_pos:
+				return segment
+
+	def segment_by_to_point(self, position: List[[int, int]]):
+		for segment in self.segments:
+			if position == segment.to_pos:
+				return segment
+
+	@property
+	def area(self) -> int:
+		res = 0
+		for segment in self.segments:
+			res += segment.from_pos[0] * segment.to_pos[1] - segment.from_pos[1] * segment.to_pos[0]
+
+		return abs(res) / 2
+
+	def __str__(self):
+		return f"HitPolygon([{ len(self) } vertices], position={self.position}, area={self.area})"
+
+	def __repr__(self):
+		return f"HitPolygon([{ len(self) } vertices], position={self.position}, area={self.area})"
+
+	def __len__(self):
+		return len(self.vertices)
+
+ 
+class HitBox(HitPolygon):
+	def __init__(self, pos1: List[[int, int]], pos2: List[[int, int]]):
+		super().__init__([ pos1, [pos1[0], pos2[1]], pos2, [pos2[0], pos1[1]] ])
+
+	def at_pos(self, position: List[[int, int]]):
+		new_vertices = [ segment.at_pos(position).from_pos for segment in self.segments ]
+		return HitBox(new_vertices[:2][0], new_vertices[2:4][0])
+
+	def intersects_hitbox(self, hitbox) -> bool:
+		if isinstance(hitbox, HitBox):
+			if hitbox.left_up[0] <= self.left_up[0] <= hitbox.right_up[0] or hitbox.left_up[0] <= self.right_up[0] <= hitbox.right_up[0]:
+				if hitbox.left_up[1] <= self.left_up[1] <= hitbox.left_down[1] or hitbox.left_up[1] <= self.left_down[1] <= hitbox.left_down[1]:
+					return True
+
+			return False
+		else:
+			raise ValueError(f"HitBox.intersects_hitbox takes HitBox object, not {hitbox} {type(hitbox)}")
+
+	def intersects_point(self, point: List[[int, int]]) -> bool:
+		if isinstance(hitbox, HitBox):
+			return self.left_up[0] <= point[0] <= self.right_up[0] and self.left_up[1] <= point[1] <= self.left_down[1]
+		else:
+			raise ValueError(f"HitBox.intersects_point takes a list of 2 integers, not {point} {type(point)}")
+
+	@property
+	def edge_length(self):
+		return abs(self.left_up[0] - self.right_up[0])
+
+	@property
+	def upper_segment(self):
+		return self.segment_by_from_point(self.left_up)
+	@property
+	def lower_segment(self):
+		return self.segment_by_from_point(self.right_down)
+	@property
+	def right_segment(self):
+		return self.segment_by_from_point(self.right_up)
+	@property
+	def left_segment(self):
+		return self.segment_by_from_point(self.left_down)
+
+	@property
+	def left_up(self):
+		return [min(x for (x,y) in self.vertices), min(y for (x,y) in self.vertices)]
+	@property
+	def up_left(self):
+		return [min(x for (x,y) in self.vertices), min(y for (x,y) in self.vertices)]
+
+	@property
+	def left_down(self):
+		return [min(x for (x,y) in self.vertices), max(y for (x,y) in self.vertices)]
+	@property
+	def down_left(self):
+		return [min(x for (x,y) in self.vertices), max(y for (x,y) in self.vertices)]
+
+	@property
+	def right_up(self):
+		return [max(x for (x,y) in self.vertices), min(y for (x,y) in self.vertices)]
+	@property
+	def up_right(self):
+		return [max(x for (x,y) in self.vertices), min(y for (x,y) in self.vertices)]
+
+	@property
+	def right_down(self):
+		return [max(x for (x,y) in self.vertices), max(y for (x,y) in self.vertices)]
+	@property
+	def down_right(self):
+		return [max(x for (x,y) in self.vertices), max(y for (x,y) in self.vertices)]
+	
+	def __str__(self):
+		return f"HitBox([{self.edge_length}x{self.edge_length}], position={self.position} area={self.area})"
+
+	def __repr__(self):
+		return f"HitBox([{self.edge_length}x{self.edge_length}], position={self.position} area={self.area})"

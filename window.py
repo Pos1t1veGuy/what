@@ -1,13 +1,11 @@
 from typing import *
 
-import os, time
-import pyautogui as pag
+import time
 
 from tkinter import Tk, Toplevel
-from PIL import Image, ImageTk
-from tkinter import Label
+from tkinter import Label, Canvas
 
-from .types import check_value, Media
+from .types import check_value, Media, HitBox, HitPolygon, Segment
 from .movements import Movement
 
 
@@ -16,7 +14,7 @@ class Window: # it is child window
 		always_on_top: bool = True, show_frame: bool = False, alpha: float = 1.0, transparent_color: str = None, bg_color: str = "black",
 		spawn_time: int = 0, alive_time: int = None, rhythm: int = None, on_rhythm: list = [],
 		media: Media = None, media_label_args: list = [], media_label_kwargs: dict = {'relx': 0.5, 'rely': 0.5, 'anchor': 'center'},
-		hitbox: list = [], click_button: str = 'left',
+		hitbox: Union[HitBox, HitPolygon] = None, click_button: str = 'left', hitbox_show_color = None,
 		on_mouse_in_hitbox: list = [], on_mouse_hitbox_click: list = [], on_mouse_not_in_hitbox: list = [], on_mouse_not_in_hitbox_click: list = [],
 		on_click: list = [], bg_func: Callable = None):
 		'''
@@ -27,8 +25,9 @@ class Window: # it is child window
 		alive_time: time in seconds how long it will be alive after spawn
 		rhythm: time in seconds how many seconds it will execute on_rhythm commands
 		on_rhythm: list of Command objects
-		hitbox: list of 2 positions, it will execute Command at kwarg on_mouse_in_hitbox if you indicate this kwarg
+		hitbox: HitBox or HitPolygon object, it will execute Command at kwarg on_mouse_in_hitbox if you indicate this kwarg
 		click_button: string pyautogui button id, after click it will do Command in on_click, if you indicate kwarg hitbox it will works with on_mouse_hitbox_click too
+		hitbox_show_color: color of hitbox, if it is not None hitbox will be filled
 		'''
 
 		self.name = 'independent_child_window'
@@ -86,19 +85,15 @@ class Window: # it is child window
 		self.media_label_kwargs = media_label_kwargs
 		self.media_label_args = media_label_args
 
-		check_value(hitbox, [list, tuple], exc_msg=f"'hitbox' constructor kwarg must be list or tuple of 2 positions, like [ (0, 0), (1, 1) ], not {hitbox} {type(hitbox)}")
-		if len(hitbox) == 2:
-			check_value(hitbox[0], [list, tuple], exc_msg=f"'hitbox' constructor kwarg must be list or tuple of 2 positions ( with only integers ), like [ (0, 0), (1, 1) ], not {hitbox} {type(hitbox)}")
-			check_value(hitbox[1], [list, tuple], exc_msg=f"'hitbox' constructor kwarg must be list or tuple of 2 positions ( with only integers ), like [ (0, 0), (1, 1) ], not {hitbox} {type(hitbox)}")
-			if len(hitbox[0]) == len(hitbox[1]) == 2:
-				if isinstance(hitbox[0][0], int) and isinstance(hitbox[0][1], int) and isinstance(hitbox[1][0], int) and isinstance(hitbox[0][1], int):
-					self.hitbox = hitbox
-				else:
-					raise ValueError(f"'hitbox' constructor kwarg must be list or tuple of 2 positions ( with only integers ), like [ (0, 0), (1, 1) ], not {hitbox} {type(hitbox)}")
-			else:
-				raise ValueError(f"'hitbox' constructor kwarg must be list or tuple of 2 positions ( with only integers ), like [ (0, 0), (1, 1) ], not {hitbox} {type(hitbox)}")
+		if hitbox:
+			check_value(hitbox, [HitBox, HitPolygon], exc_msg=f"'hitbox' constructor kwarg must be HitBox or HitPolygon object, not {hitbox} {type(hitbox)}")
+			self.hitbox = hitbox
+			self.default_hitbox = hitbox
 		else:
-			self.hitbox = []
+			self.hitbox = None
+			self.default_hitbox = None
+
+		self.hitbox_show_color = hitbox_show_color
 
 		self.on_hitbox = on_mouse_in_hitbox
 		self.on_mouse_not_hitbox = on_mouse_not_in_hitbox
@@ -109,6 +104,7 @@ class Window: # it is child window
 
 		self.screen_width = None
 		self.screen_height = None
+		self.canvas = None
 
 		check_value(always_on_top, [bool, int], exc_msg=f"'always_on_top' constructor kwarg must be bool, not {always_on_top} {type(always_on_top)}")
 		self.always_on_top = always_on_top
@@ -142,6 +138,8 @@ class Window: # it is child window
 
 		if self.pause > 0:
 			self.pause -= 1/fps
+			return True
+		elif self.pause == -1:
 			return True
 		else:
 			self.pause = 0
@@ -201,7 +199,6 @@ You must:
 		return True
 
 	def set_window(self, root: Union[Tk, Toplevel]):
-
 		self.root = root
 		self.root.geometry(f"{self.default_size[0]}x{self.default_size[1]}")
 
@@ -219,6 +216,11 @@ You must:
 
 		self.screen_width = self.root.winfo_screenwidth()
 		self.screen_height = self.root.winfo_screenheight()
+
+		#if self.hitbox_show_color:
+			#self.canvas = Canvas(root, width=self.default_size[0], height=self.default_size[1], highlightthickness=0)
+			#self.canvas.pack()
+			#self.canvas.create_rectangle(self.hitbox[0][0], self.hitbox[0][1], self.hitbox[1][0], self.hitbox[1][1], fill=self.hitbox_show_color)
 
 		if self.transparent_color:
 			self.root.wm_attributes("-transparentcolor", self.transparent_color)
@@ -258,12 +260,8 @@ f"{self.adress}Window.resize_window takes 2 arguments: integers > 0 or relaitive
 				self.command(self.on_click)
 
 			if self.hitbox:
-				is_in_hitbox = cursor.intersect([
-					(self.position[0] + self.hitbox[0][0], self.position[1] + self.hitbox[0][1]),
-					(self.position[0] + self.hitbox[1][0], self.position[1] + self.hitbox[1][1])
-					])
 
-				if is_in_hitbox:
+				if cursor.intersects(self.hitbox):
 					if isinstance(self.on_hitbox, list) and len(self.on_hitbox):
 						if isinstance(self.on_hitbox[0], str):
 							self.command(self.on_hitbox)
@@ -388,6 +386,8 @@ f"{self.adress}Invalid string command at Window.movements[{self.movement_index}]
 					pos = self.movements[self.movement_index]
 					self.root.geometry(f"+{pos[0]}+{pos[1]}")
 					self.position = pos
+					if self.default_hitbox:
+						self.hitbox = self.default_hitbox.at_pos(pos)
 
 					self.movement_index += 1
 				elif isinstance(self.movements[self.movement_index][0], str):

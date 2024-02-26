@@ -5,10 +5,6 @@ import pyautogui as pag
 
 import time
 import os
-import win32api
-import win32con
-import win32gui
-from win32gui import LoadImage, LR_LOADFROMFILE
 
 from PIL import Image, ImageTk
 from pynput import mouse
@@ -16,14 +12,24 @@ from tkinter import Tk, Label, Toplevel, Canvas
 from threading import Thread as th
 from traceback import print_exc
 
-from .types import Media, check_value
+from .types import Media, check_value, HitBox, HitPolygon, Segment
 
 
 class Area: # main window
 	def __init__(self, cursor = None, bg_always_on_top: bool = False, minimize_windows: bool = True, moments: dict = {},
-		bg_func: Callable = None, on_death: Callable = None, on_start: Callable = None, cursor_circle_radius: int = 3,
+		bg_func: Callable = None, on_death: Callable = None, on_start: Callable = None, cursor_circle_radius: int = 3, show_mouse: bool = False,
 		on_tl_start: Callable = None, on_tl_death: Callable = None, on_click: Callable = None,
 		alpha: int = None, media: Media = None):
+		'''
+		cursor: Cursor object or None
+		bg_always_on_top: background is black window, you can set up it. This kwarg makes window always on top
+		minimize_windows: if True it will minimize every opened window when it starts
+		moments: dict with integer key second and callable value ( value must takes Area ). At a given second will do callable
+		bg_func: callable that updated along with Area ( 1/fps times per second )
+		cursor_circle_radius: integer radius of white circle under mouse, if 0 it will not shows circle
+		alpha: background is black window, you can set up it. This kwarg makes level of window transparentcy
+		media: Media object or None
+		'''
 
 		self.timelines = []
 		self.keyboard_thread = th(target=self.check_keyboard, daemon=True)
@@ -35,12 +41,9 @@ class Area: # main window
 		self.root = Tk()
 		self.root.title("WHAT root")
 
-		check_value(moments, dict, f"'moments' constructor kwarg must be dict with integer keys and callable values or list of callable values ( functions must takes Cursor argument )")
+		check_value(moments, dict, f"'moments' constructor kwarg must be dict with integer keys and callable values or list of callable values ( functions must takes Area argument )")
 		self.moments = moments
 
-		self.pause_label = Label(self.root, text="PAUSED", font=("Arial", 34), bg="black", fg="white")
-		self.pause_label.place(relx=0.5, rely=0.5, anchor="center")
-		self.pause_label.place_forget()
 		check_value(cursor_circle_radius, int, exc_msg=f"'cursor_circle_radius' constructor kwarg must be integer >= 0, not {cursor_circle_radius} {type(cursor_circle_radius)}")
 		self.cursor_circle_radius = cursor_circle_radius
 
@@ -53,12 +56,19 @@ class Area: # main window
 			self.media = None
 			self.media_label = None
 
+		#self.message_label = Label(self.root, text="", font=("Arial", 34), bg="black", fg="white")
+		#self.message_label.place(relx=0.5, y=0, anchor="center")
+
 		if cursor:
 			self.cursor = cursor
 			self.cursor.set_window( Toplevel(self.root) )
 			self.root.config(cursor="none")
 		else:
 			self.cursor = Cursor()
+
+		check_value(show_mouse, [bool, int], f"'show_mouse' constructor kwarg must be bool, not {show_mouse} {type(show_mouse)}")
+		if not show_mouse:
+			self.root.config(cursor="none")
 
 		self.screen_width = self.root.winfo_screenwidth()
 		self.screen_height = self.root.winfo_screenheight()
@@ -100,14 +110,14 @@ class Area: # main window
 		if bg_always_on_top:
 			self.root.wm_attributes("-topmost", 1)
 
-	def set_timelines(self, timelines: list):
+	def set_timelines(self, timelines: list): # sets new timeline list
 		check_value(timelines, [tuple, list], exc_msg=f"Area.set_timelines takes a list of TimeLine objects, not {timelines} {type(timelines)}")
 		self.timelines = timelines
 
 		for i, timeline in enumerate(self.timelines):
 			timeline.name = i
 
-	def add_timeline(self, timeline):
+	def add_timeline(self, timeline): # adds only one timeline to timeline list
 		self.timelines.append(timeline)
 		self.timelines[-1].name = self.timelines.index(self.timelines[-1])
 
@@ -129,26 +139,14 @@ class Area: # main window
 		if self.bg_func:
 			self.bg_func(self, self.fps)
 
+		if self.moments:
+			self.check_moments()
 		if self.cursor.pressed_button and callable(self.on_click):
 			self.on_click(self)
-
 		if self.timeline_new_alpha != None and self.realpha_speed != '':
-			if self.timeline_new_alpha < self.alpha and self.timeline_new_alpha < eval(f'self.alpha{self.realpha_speed}') and float(self.realpha_speed) < 0:
-				self.set_alpha(self.realpha_speed)
-
-			elif self.timeline_new_alpha > self.alpha and self.timeline_new_alpha > eval(f'self.alpha{self.realpha_speed}') and float(self.realpha_speed) > 0:
-				self.set_alpha(self.realpha_speed)
-
-			else:
-				if self.timeline_new_alpha and ( isinstance(self.timeline_new_alpha, float) or isinstance(self.timeline_new_alpha, int) ) and 0 <= self.timeline_new_alpha <= 1:
-					self.set_alpha(self.timeline_new_alpha)
-
-				self.realpha_speed = ''
-				self.timeline_new_alpha = None
-
+			self.realpha_step()
 		if self.dead and self.realpha_speed == '' and self.timeline_new_alpha == None:
 			self.set_alpha(0)
-
 
 		if not self.paused and not self.dead:
 
@@ -170,8 +168,6 @@ class Area: # main window
 
 					if not timeline.initialized:
 						self.init_timeline(timeline)
-						if callable(self.on_tl_start):
-							self.on_tl_start(self)
 
 					if not is_dead:
 						if self.alpha != timeline.bg_alpha:
@@ -208,6 +204,10 @@ class Area: # main window
 			obj.set_window( Toplevel(self.root) ) # creates child window for every Window object
 			obj.name = i
 		timeline.initialized = True
+
+		if callable(self.on_tl_start):
+			self.on_tl_start(self)
+
 		self.animate_alpha(timeline.bg_alpha, timeline.bg_realpha_speed)
 
 	def animate_alpha(self, new_alpha: Union[float, int], speed: int):
@@ -240,6 +240,39 @@ class Area: # main window
 			else:
 				raise ValueError(f"Area.set_alpha takes an integer, a float from 0 to 1 or a relative string numbers like '+100' or '-30', not {alpha} {type(alpha)}")
 
+	def message(self, text: str, duration: int = 1): # shows message with 'text' at game
+		...
+
+	def realpha_step(self):
+		if self.timeline_new_alpha < self.alpha and self.timeline_new_alpha < eval(f'self.alpha{self.realpha_speed}') and float(self.realpha_speed) < 0:
+			self.set_alpha(self.realpha_speed)
+
+		elif self.timeline_new_alpha > self.alpha and self.timeline_new_alpha > eval(f'self.alpha{self.realpha_speed}') and float(self.realpha_speed) > 0:
+			self.set_alpha(self.realpha_speed)
+
+		else:
+			if self.timeline_new_alpha and ( isinstance(self.timeline_new_alpha, float) or isinstance(self.timeline_new_alpha, int) ) and 0 <= self.timeline_new_alpha <= 1:
+				self.set_alpha(self.timeline_new_alpha)
+
+			self.realpha_speed = ''
+			self.timeline_new_alpha = None
+
+	def check_moments(self):
+		check_value(self.moments, dict, f"'moments' constructor kwarg must be dict with integer keys and callable values or list of callable values ( functions must takes Area argument )")
+		for sec in self.moments.keys():
+			if sec <= self.alive_time and self.moments[sec] != 'done':
+				if callable(self.moments[sec]):
+					self.moments[sec](self)
+					self.moments[sec] = 'done'
+				elif callable(self.moments[sec]) and all([ callable(i) for i in self.moments[sec] ]):
+					for func in self.moments[sec]:
+						func(self)
+					self.moments[sec] = 'done'
+				else:
+					raise ValueError(
+f"'moments' constructor kwarg must be dict with integer keys and callable values or list of callable values ( functions must takes Area argument )"
+						)
+
 	def check_keyboard(self): # logs keystrokes
 		while 1:
 			key = kb.read_event()
@@ -253,13 +286,6 @@ class Area: # main window
 				if key.name == 'space':
 					self.paused = not self.paused
 					self.pause_count += 1
-
-					if self.pause_label.winfo_viewable():
-						self.pause_label.place_forget()
-						self.root.config(cursor="none")
-					else:
-						self.pause_label.place(relx=0.5, rely=0.5, anchor="center")
-						self.root.config(cursor="arrow")
 
 	def kill(self, realpha_speed: int = 2):
 		self.root.wm_attributes("-topmost", 1)
@@ -277,8 +303,14 @@ class TimeLine: # it is a scene where contain child windows, you may use several
 	def __init__(self, objects: list, bg_alpha: Union[int, float] = 1, bg_realpha_speed: int = 1,
 		wait_time: int = 0, alive_time: int = -1, moments: dict = {},
 		on_start: Callable = None, on_death: Callable = None):
-		# objects: list of Window objects
-		# wait_time: delay time before start in seconds
+		'''
+		objects: list of Window objects
+		wait_time: delay time before start in seconds
+		bg_alpha: integer level of background area window transparency
+		alive_time: integer limit, maximum of alive time
+		moments: dict with integer key second and callable value ( value must takes TimeLine ). At a given second will do callable
+		'''
+
 		self.name = 'independent_timeline'
 		check_value(objects, [tuple, list], exc_msg=f"'objects' constructor kwarg must be list of Window objects, not {objects} {type(objects)}")
 		self.objects = objects
@@ -290,7 +322,7 @@ class TimeLine: # it is a scene where contain child windows, you may use several
 		self.wait_time = wait_time
 		check_value(alive_time, int, exc_msg=f"'alive_time' constructor kwarg must be integer > 0 ( or -1 if it should be endless ), not {alive_time} {type(alive_time)}")
 		self.max_alive_time = alive_time
-		check_value(moments, dict, f"'moments' constructor kwarg must be dict with integer keys and callable values or list of callable values ( functions must takes Cursor argument )")
+		check_value(moments, dict, f"'moments' constructor kwarg must be dict with integer keys and callable values or list of callable values ( functions must takes TimeLine argument )")
 		self.moments = moments
 
 		self.on_start = on_start
@@ -309,21 +341,21 @@ class TimeLine: # it is a scene where contain child windows, you may use several
 
 			if not self.started:
 				if callable(self.on_start):
-					self.on_start(cursor)
+					self.on_start(self)
 				self.started = True
 
 			for sec in self.moments.keys():
 				if sec <= self.alive_time and self.moments[sec] != 'done':
 					if callable(self.moments[sec]):
-						self.moments[sec](cursor)
+						self.moments[sec](self)
 						self.moments[sec] = 'done'
 					elif callable(self.moments[sec]) and all([ callable(i) for i in self.moments[sec] ]):
 						for func in self.moments[sec]:
-							func(cursor)
+							func(self)
 						self.moments[sec] = 'done'
 					else:
 						raise ValueError(
-f"'moments' constructor kwarg must be dict with integer keys and callable values or list of callable values ( functions must takes Cursor argument )"
+f"'moments' constructor kwarg must be dict with integer keys and callable values or list of callable values ( functions must takes TimeLine argument )"
 							)
 
 			if self.alive_time >= self.wait_time:
@@ -336,7 +368,7 @@ f"'moments' constructor kwarg must be dict with integer keys and callable values
 				if res and not self.dead:
 					self.dead = True
 					if callable(self.on_death):
-						self.on_death(cursor)
+						self.on_death(self)
 
 				self.alive_time += (time.time() - start_time) + 1/fps
 				return res
@@ -351,7 +383,7 @@ f"'moments' constructor kwarg must be dict with integer keys and callable values
 
 
 class Cursor:
-	def __init__(self, hp: int = 1, radius: int = 0, on_death = None,
+	def __init__(self, hp: int = 1, hitbox: Union[HitBox, HitPolygon] = None, hitbox_show_color = None, on_death = None, show_mouse: bool = False,
 		image: Union[Image, str] = None, transparent_color: str = None, resize: List[[int, int]] = None, alpha: float = 1.0):
 		'''
 		radius: integer numbers, the "click zone" of cursor expands by this numbers in all directions. For example 1 gets rectangle 3x3 around cursor, 2 gets 5x5
@@ -367,12 +399,21 @@ class Cursor:
 
 		self.on_death = on_death
 		self.dead = False
+		self.zero_hp = False
 
-		check_value(radius, int, exc_msg=f"'radius' constructor kwarg must be integer >= 0, not {radius} {type(radius)}")
-		if radius >= 0:
-			self.radius = radius
+		check_value(show_mouse, [int, bool], exc_msg=f"'show_mouse' constructor kwarg must be bool, not {show_mouse} {type(show_mouse)}")
+		self.show_mouse = show_mouse
+
+		if hitbox:
+			check_value(hitbox, [HitBox, HitPolygon], exc_msg=f"'hitbox' constructor kwarg must be HitBox or HitPolygon object, not {hitbox} {type(hitbox)}")
+			self.default_hitbox = hitbox
 		else:
-			raise ValueError(f"'radius' constructor kwarg must be integer >= 0, not {radius} {type(radius)}")
+			self.default_hitbox = None
+
+		self.hitbox_show_color = hitbox_show_color
+
+		length = 3_000
+		self.default_ray = Segment([0,0], [0,length])
 
 		if isinstance(image, str):
 			self.image = Image.open(image)
@@ -387,7 +428,7 @@ class Cursor:
 		self.alpha = 0
 		self.set_alpha(alpha, init=True)
 
-		if resize
+		if resize:
 			check_value(resize, [list, tuple], f"'resize' constructor kwarg must be list of 2 integers > 0, not {resize} {type(resize)}")
 			if len(resize) == 2:
 				check_value(resize[0], int, f"'resize' constructor kwarg must be list of 2 integers > 0, not {resize} {type(resize)}")
@@ -407,11 +448,12 @@ class Cursor:
 
 	def set_hp(self, new_hp: Union[int, str]):
 		if isinstance(new_hp, int):
-			if new_hp < 0:
+			if new_hp <= 0:
 				self.hp = 0
-				if callable(self.on_death) and not self.dead:
-					self.on_death(self)
-					self.kill()
+				if not self.zero_hp:
+					if callable(self.on_death) and not self.dead:
+						self.on_death(self)
+					self.zero_hp = True
 			else:			
 				self.hp = new_hp
 
@@ -419,11 +461,12 @@ class Cursor:
 			if new_hp[0] in ['-', '+'] and new_hp[1:].isdigit():
 				new = eval(f'self.hp{new_hp}')
 
-				if new < 0:
+				if new <= 0:
 					self.hp = 0
-					if callable(self.on_death) and not self.dead:
-						self.on_death()
-						self.kill()
+					if not self.zero_hp:
+						if callable(self.on_death) and not self.dead:
+							self.on_death(self)
+						self.zero_hp = True
 				else:
 					self.hp = new
 			else:
@@ -459,28 +502,28 @@ class Cursor:
 		else:
 			raise ValueError(f"Cursor.set_alpha takes a float, an integer from 0 to 1 or a relative string numbers like '+100' or '-30', not {alpha} {type(alpha)}")
 
-	def intersect(self, box: list):
-		check_value(box, [list, tuple], exc_msg=f"Cursor.intersect takes a list with 2 positions ( 2 lists with 2 integers >= 0 ), like [ (0, 0), (1, 1) ], not {box}, {type(box)}"):
-		if len(box) == 2 and all([ len(i) == 2 and isinstance(i[0], int) and isinstance(i[1], int) for i in box ]):
+	def intersects(self, object: Union[HitBox, HitPolygon, Segment, list]):
+		check_value(object, [HitBox, HitPolygon, Segment, list, tuple], exc_msg=f"Cursor.intersect takes Hitbox/HitPolygon/Segment object or list/tuple of 2 integers, not {object}, {type(object)}")
 
-			mx, my = self.position
-			mx_left, my_up, mx_right, my_down = mx-self.radius, my-self.radius, mx+self.radius, my+self.radius
-			(bx_left, by_up), (bx_right, by_down) = box
+		if isinstance(object, (tuple, list)):
+			if not all(isinstance(pos, int) for pos in object):
+				raise ValueError(f"Cursor.intersect takes Hitbox/HitPolygon/Segment object or list/tuple of 2 integers, not {object}, {type(object)}")
 
-			# box more than cursor
-			if bx_left < mx_left <  bx_right or bx_left < mx_right <  bx_right: # if cursor x+radius or cursor x-radius is from box x[0] to box x[1]
-				if by_up < my_up <  by_down or by_up < my_down <  by_down: # if cursor y+radius or cursor y-radius is from boy y[0] to boy y[1]
-					return True
+		inter_cnt = object.intersects(self.ray, return_count=True)
+		if inter_cnt % 2 and inter_cnt != 0:
+			return True
 
-			# cursor more than box
-			if mx_left < bx_left <  mx_right or mx_left < bx_right <  mx_right: # if box x[0] or box x[1] is from cursor x+radius or cursor x-radius
-				if my_up < by_up <  my_down or my_up < by_down <  my_down: # if boy y[0] or boy y[1] is from cursor y+radius or cursor y-radius
-					return True
-
-			return False
-
+		if isinstance(object, HitBox):
+			if isinstance(self.hitbox, HitBox): # hitbox intersects cursor hitbox or polygon
+				return object.intersects_hitbox(self.hitbox)
+			elif self.hitbox == None: # hitbox intersects cursor position
+				return object.intersects_point(self.position)
 		else:
-			raise ValueError(f"Cursor.intersect takes a list with 2 positions ( 2 lists with 2 integers >= 0 ), like [ (0, 0), (1, 1) ], not {box}, {type(box)}")
+			if self.hitbox: # polygon intersects cursor hitbox or polygon
+				if object.intersects(self.hitbox):
+					return True
+
+		return False
 
 	def set_window(self, root: Union[Tk, Toplevel]):
 		if self.image:
@@ -491,7 +534,6 @@ class Cursor:
 			if self.transparent_color:
 				self.root.wm_attributes("-transparentcolor", self.transparent_color)
 
-			self.root.config(cursor="none")
 			self.root.attributes('-topmost', True)
 			self.root.overrideredirect(True)
 			self.root.attributes('-alpha', float(self.alpha))
@@ -501,6 +543,9 @@ class Cursor:
 			self.photo = ImageTk.PhotoImage(self.image)
 			self.image_label = Label(root, image=self.photo)
 			self.image_label.pack()
+
+		if not self.show_mouse:
+			self.root.config(cursor="none")
 
 	def resize(self, size: List[[int, int]]):
 		if size:
@@ -519,11 +564,23 @@ class Cursor:
 	def update(self):
 		mouse_x, mouse_y = pag.position()
 
+		if self.hp <= 0 and callable(self.on_death) and not self.dead:
+			self.on_death(self)
+
 		if self.image:
 			window_x = mouse_x - self.image.size[0] // 2
 			window_y = mouse_y - self.image.size[1] // 2
 
 			self.root.geometry(f"{self.image.size[0]}x{self.image.size[1]}+{window_x}+{window_y}")
+
+	@property
+	def ray(self) -> list:
+		return self.default_ray.at_pos(self.position) if self.position else None
+
+	@property
+	def hitbox(self) -> Union[HitBox, HitPolygon]:
+		new_pos = [ self.position[0] - self.default_hitbox.edge_length//2, self.position[1] - self.default_hitbox.edge_length//2 ]
+		return self.default_hitbox.at_pos(new_pos) if self.default_hitbox and self.position else None
 
 	def on_mouse_move(self, x, y): # logs mouse position
 		self.position = [x,y]
