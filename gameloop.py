@@ -106,6 +106,7 @@ class Area: # main window
 		self.dead = False
 		self.fps = 0
 		self.key = None
+		self.results = {}
 
 		if bg_always_on_top:
 			self.root.wm_attributes("-topmost", 1)
@@ -409,6 +410,7 @@ class Cursor:
 			self.default_hitbox = hitbox
 		else:
 			self.default_hitbox = None
+		self.hitbox = None
 
 		self.hitbox_show_color = hitbox_show_color
 
@@ -423,6 +425,8 @@ class Cursor:
 			self.image = None
 
 		self.root = None
+		self.canvas = None
+		self.polygon_id = None
 		self.transparent_color = transparent_color
 
 		self.alpha = 0
@@ -502,26 +506,28 @@ class Cursor:
 		else:
 			raise ValueError(f"Cursor.set_alpha takes a float, an integer from 0 to 1 or a relative string numbers like '+100' or '-30', not {alpha} {type(alpha)}")
 
-	def intersects(self, object: Union[HitBox, HitPolygon, Segment, list]):
+	def intersects(self, object: Union[HitBox, HitPolygon, Segment, list, tuple]):
 		check_value(object, [HitBox, HitPolygon, Segment, list, tuple], exc_msg=f"Cursor.intersect takes Hitbox/HitPolygon/Segment object or list/tuple of 2 integers, not {object}, {type(object)}")
 
 		if isinstance(object, (tuple, list)):
 			if not all(isinstance(pos, int) for pos in object):
 				raise ValueError(f"Cursor.intersect takes Hitbox/HitPolygon/Segment object or list/tuple of 2 integers, not {object}, {type(object)}")
 
-		inter_cnt = object.intersects(self.ray, return_count=True)
-		if inter_cnt % 2 and inter_cnt != 0:
-			return True
-
 		if isinstance(object, HitBox):
 			if isinstance(self.hitbox, HitBox): # hitbox intersects cursor hitbox or polygon
-				return object.intersects_hitbox(self.hitbox)
+				if self.hitbox in object:
+					return True
 			elif self.hitbox == None: # hitbox intersects cursor position
-				return object.intersects_point(self.position)
+				if self.position in object:
+					return True
 		else:
 			if self.hitbox: # polygon intersects cursor hitbox or polygon
 				if object.intersects(self.hitbox):
 					return True
+
+		inter_cnt = object.intersects(self.ray, return_count=True)
+		if inter_cnt % 2 and inter_cnt != 0:
+			return True
 
 		return False
 
@@ -537,6 +543,11 @@ class Cursor:
 			self.root.attributes('-topmost', True)
 			self.root.overrideredirect(True)
 			self.root.attributes('-alpha', float(self.alpha))
+
+			if self.hitbox_show_color:
+				self.canvas = Canvas(root, width=self.image.size[0], height=self.image.size[1], highlightthickness=0)
+				self.canvas.pack()
+				self.polygon_id = self.canvas.create_polygon(self.default_hitbox.as_tk_polygon, fill=self.hitbox_show_color)
 
 			self.root.geometry(f"{self.image.size[0]}x{self.image.size[1]}")
 
@@ -563,6 +574,7 @@ class Cursor:
 
 	def update(self):
 		mouse_x, mouse_y = pag.position()
+		self.update_hitbox()
 
 		if self.hp <= 0 and callable(self.on_death) and not self.dead:
 			self.on_death(self)
@@ -573,14 +585,21 @@ class Cursor:
 
 			self.root.geometry(f"{self.image.size[0]}x{self.image.size[1]}+{window_x}+{window_y}")
 
-	@property
-	def ray(self) -> list:
-		return self.default_ray.at_pos(self.position) if self.position else None
+	def update_hitbox(self):
+		if self.position:
+			self.ray = self.default_ray.at_pos(self.position)
 
-	@property
-	def hitbox(self) -> Union[HitBox, HitPolygon]:
-		new_pos = [ self.position[0] - self.default_hitbox.edge_length//2, self.position[1] - self.default_hitbox.edge_length//2 ]
-		return self.default_hitbox.at_pos(new_pos) if self.default_hitbox and self.position else None
+			if self.polygon_id != None:
+				self.canvas.itemconfig(self.polygon_id, fill=self.hitbox_show_color)
+
+			if self.default_hitbox:
+				new_pos = [ self.position[0] - self.default_hitbox.edge_length//2, self.position[1] - self.default_hitbox.edge_length//2 ]
+				self.hitbox = self.default_hitbox.at_pos(new_pos)
+			else:
+				self.hitbox = None
+		else:
+			self.ray = None
+			self.hitbox = None
 
 	def on_mouse_move(self, x, y): # logs mouse position
 		self.position = [x,y]
@@ -592,6 +611,15 @@ class Cursor:
 		self.dead = True
 		if self.root:
 			self.root.destroy()
+
+	def __str__(self):
+		return f"Cursor([{ len(self) } vertices], position={self.position}, area={self.area})"
+	
+	def __contains__(self, i: Union[list, tuple, Segment, HitPolygon, HitBox]):
+		return self.intersects(i)
+
+	def __repr__(self):
+		return f"HitPolygon(hp={self.hp}, hitbox={self.hitbox}, hitbox_show_color={self.hitbox_color_show}, show_mouse={self.show_mouse}, image={self.image}, transparent_color={self.transparent_color}, resize={self.resize}, alpha={self.alpha})"
 
 
 def is_float(string: str):

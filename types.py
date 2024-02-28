@@ -329,7 +329,7 @@ class Segment:
 
 		self.k = Segment.get_k(from_pos, to_pos)
 		self.b = Segment.get_b(from_pos, to_pos)
-		self.length = round( sqrt( (from_pos[0] - to_pos[0])**2 + (from_pos[1] - to_pos[1])**2 ), 2 )
+		self.length = sqrt( (from_pos[0] - to_pos[0])**2 + (from_pos[1] - to_pos[1])**2 )
 
 		self.max_x, self.min_x = max(from_pos[0], to_pos[0]), min(from_pos[0], to_pos[0])
 		self.max_y, self.min_y = max(from_pos[1], to_pos[1]), min(from_pos[1], to_pos[1])
@@ -347,7 +347,7 @@ class Segment:
 			raise ValueError(f"Segment.intersects takes Segment/HitPolygon/HitBox object or list of 2 integers, not {object} {type(object)}")
 
 	def intersects_point(self, point: List[[int, int]]) -> bool:
-		if len(point) == 2 and all(isinstance(pos, int) for pos in point):
+		if len(point) == 2 and ( all(isinstance(pos, float) for pos in point) or all(isinstance(pos, int) for pos in point) ):
 			if self.k:
 				return float(point[1]) == self.k * point[0] + self.b and self.min_y <= point[1] <= self.max_y and self.min_x <= point[0] <= self.max_x
 			else:
@@ -356,19 +356,16 @@ class Segment:
 			raise ValueError(f"Segment.intersects_point takes a list or tuple of 2 integers, not {point} {type(point)}")
 
 	def intersects_segment(self, segment) -> bool:
-		if self.direction == 'horizontal':
-			return self.intersects_point([segment.max_x, self.max_y]) and segment.intersects_point([segment.max_x, self.max_y])
-		elif self.direction == 'vertical':
-			return self.intersects_point([self.max_x, segment.max_y]) and segment.intersects_point([self.max_x, segment.max_y])
-		elif self.k == segment.k:
-			return self.intersects_point(segment.from_pos) or self.intersects_point(segment.to_pos) or segment.intersects_point(self.from_pos) or segment.intersects_point(self.to_pos)
-		else:
-			x = (segment.b - self.b) / (self.k - segment.k)
-			y = self.k * x + self.b
+		if self.k == segment.k:
+			if self.direction == 'horizontal':
+				return self.intersects_point([segment.max_x, self.max_y]) and segment.intersects_point([segment.max_x, self.max_y])
+			elif self.direction == 'vertical':
+				return self.intersects_point([self.max_x, segment.max_y]) and segment.intersects_point([self.max_x, segment.max_y])
 
-			if self.min_x <= x <= self.max_x and segment.min_x <= x <= segment.max_x:
-				if self.min_y <= y <= self.max_y and segment.min_y <= y <= segment.max_y:
-					return True
+		x = (segment.b - self.b) / (self.k - segment.k)
+		y = self.k * x + self.b
+
+		return self.intersects_point([x,y]) and segment.intersects_point([x,y])
 
 		return False
 
@@ -402,7 +399,7 @@ class Segment:
 	@staticmethod
 	def get_b(pos1: List[[int, int]], pos2: List[[int, int]]) -> int:
 		if pos1[0] == pos2[0]: # if it is vertical line
-			return 0
+			return pos1[0]
 		elif pos1[1] == pos2[1]: # if it is horizontal line
 			return pos2[1]
 		else:
@@ -530,11 +527,40 @@ class HitPolygon:
 
 		return abs(res) / 2
 
+	@property
+	def as_tk_polygon(self):
+		res = []
+		for pos in self.vertices:
+			for xy in pos:
+				res.append(xy)
+		return res
+
 	def __str__(self):
 		return f"HitPolygon([{ len(self) } vertices], position={self.position}, area={self.area})"
+	
+	def __contains__(self, i: Union[list, tuple, Segment]):
+		if isinstance(i, (list, tuple, HitBox, HitPolygon, Segment)):
+			return self.intersects(i)
+		else:
+			if hasattr(i, 'hitbox'):
+				if i.intersects(self):
+					return True
+			if hasattr(i, 'ray'):
+				if i.intersects(self):
+					return True
+			return False
+
+	def __iter__(self):
+		return self.vertices
+
+	def __list__(self):
+		return self.vertices
+
+	def __getitem__(self, i):
+		return self.vertices[i]
 
 	def __repr__(self):
-		return f"HitPolygon([{ len(self) } vertices], position={self.position}, area={self.area})"
+		return f"HitPolygon({self.vertices})"
 
 	def __len__(self):
 		return len(self.vertices)
@@ -608,9 +634,9 @@ class HitBox(HitPolygon):
 	@property
 	def down_right(self):
 		return [max(x for (x,y) in self.vertices), max(y for (x,y) in self.vertices)]
-	
+
 	def __str__(self):
 		return f"HitBox([{self.edge_length}x{self.edge_length}], position={self.position} area={self.area})"
 
 	def __repr__(self):
-		return f"HitBox([{self.edge_length}x{self.edge_length}], position={self.position} area={self.area})"
+		return f"HitBox({self.left_up}, {self.right_down})"

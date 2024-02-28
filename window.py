@@ -122,6 +122,7 @@ class Window: # it is child window
 		self.alpha = .0
 		self.on_rhythm = on_rhythm
 		self.pause = 0
+		self.polygon_id = None
 
 		self.default_alpha = float(alpha)
 		self.default_size = size
@@ -217,11 +218,11 @@ You must:
 		self.screen_width = self.root.winfo_screenwidth()
 		self.screen_height = self.root.winfo_screenheight()
 
-		#if self.hitbox_show_color:
-			#self.canvas = Canvas(root, width=self.default_size[0], height=self.default_size[1], highlightthickness=0)
-			#self.canvas.pack()
-			#self.canvas.create_rectangle(self.hitbox[0][0], self.hitbox[0][1], self.hitbox[1][0], self.hitbox[1][1], fill=self.hitbox_show_color)
-
+		if self.hitbox_show_color:
+			self.canvas = Canvas(root, width=self.default_size[0], height=self.default_size[1], highlightthickness=0)
+			self.canvas.pack()
+			self.polygon_id = self.canvas.create_polygon(self.hitbox.as_tk_polygon, fill=self.hitbox_show_color)
+			
 		if self.transparent_color:
 			self.root.wm_attributes("-transparentcolor", self.transparent_color)
 
@@ -259,9 +260,11 @@ f"{self.adress}Window.resize_window takes 2 arguments: integers > 0 or relaitive
 			if callable(self.on_click):
 				self.command(self.on_click)
 
-			if self.hitbox:
+			if self.hitbox and ( cursor.hitbox or cursor.position ):
+				if self.hitbox in cursor:
+					if self.polygon_id != None:
+						self.canvas.itemconfig(self.polygon_id, fill=self.hitbox_show_color)
 
-				if cursor.intersects(self.hitbox):
 					if isinstance(self.on_hitbox, list) and len(self.on_hitbox):
 						if isinstance(self.on_hitbox[0], str):
 							self.command(self.on_hitbox)
@@ -271,6 +274,9 @@ f"{self.adress}Window.resize_window takes 2 arguments: integers > 0 or relaitive
 					if cursor.pressed_button and callable(self.on_hitbox_click):
 						self.on_hitbox_click(self)
 				else:
+					if self.polygon_id != None:
+						self.canvas.itemconfig(self.polygon_id, fill="blue" if self.hitbox_show_color != 'blue' else 'red')
+
 					if isinstance(self.on_mouse_not_hitbox, list) and len(self.on_mouse_not_hitbox):
 						if isinstance(self.on_mouse_not_hitbox[0], str):
 							self.command(self.on_mouse_not_hitbox)
