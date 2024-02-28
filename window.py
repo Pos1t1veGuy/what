@@ -12,7 +12,7 @@ from .movements import Movement
 class Window: # it is child window
 	def __init__(self, movements: Union[ List[Tuple[int, int]], list ], size: List[int], cycle: bool = False, repeat: int = -1,
 		always_on_top: bool = True, show_frame: bool = False, alpha: float = 1.0, transparent_color: str = None, bg_color: str = "black",
-		spawn_time: int = 0, alive_time: int = None, rhythm: int = None, on_rhythm: list = [],
+		spawn_time: int = 0, alive_time: int = None, rhythm: int = None, on_rhythm: list = [], moments: dict = {},
 		media: Media = None, media_label_args: list = [], media_label_kwargs: dict = {'relx': 0.5, 'rely': 0.5, 'anchor': 'center'},
 		hitbox: Union[HitBox, HitPolygon] = None, click_button: str = 'left', hitbox_show_color = None,
 		on_mouse_in_hitbox: list = [], on_mouse_hitbox_click: list = [], on_mouse_not_in_hitbox: list = [], on_mouse_not_in_hitbox_click: list = [],
@@ -28,6 +28,7 @@ class Window: # it is child window
 		hitbox: HitBox or HitPolygon object, it will execute Command at kwarg on_mouse_in_hitbox if you indicate this kwarg
 		click_button: string pyautogui button id, after click it will do Command in on_click, if you indicate kwarg hitbox it will works with on_mouse_hitbox_click too
 		hitbox_show_color: color of hitbox, if it is not None hitbox will be filled
+		moments: dict with integer key second and callable value ( value must takes Window ). At a given second will do callable
 		'''
 
 		self.name = 'independent_child_window'
@@ -46,6 +47,9 @@ class Window: # it is child window
 			self.repeat = repeat
 		else:
 			self.repeat = repeat-1
+
+		check_value(moments, dict, f"'moments' constructor kwarg must be dict with integer keys and callable values or list of callable values ( functions must takes TimeLine argument )")
+		self.moments = moments
 
 		check_value(size, list, exc_msg=f"'size' constructor kwarg must be list of 2 integers > 0, not {size} {type(size)}")
 		if len(size) == 2:
@@ -80,6 +84,7 @@ class Window: # it is child window
 		else:
 			self.rhythm = None
 
+		self.is_rhythm_enabled = False
 		self.alive_time = 0
 		self.position = [0,0]
 		self.media_label_kwargs = media_label_kwargs
@@ -139,14 +144,31 @@ class Window: # it is child window
 
 		if self.pause > 0:
 			self.pause -= 1/fps
+			self.alive_time += (time.time() - start_time) + 1/fps
 			return True
 		elif self.pause == -1:
+			self.alive_time += (time.time() - start_time) + 1/fps
 			return True
 		else:
 			self.pause = 0
 
 		if self.parent_tl_name != parent_timeline.name:
 			self.parent_tl_name = parent_timeline.name
+
+		for sec in self.moments.keys():
+				if sec <= self.alive_time and self.moments[sec] != 'done':
+					if callable(self.moments[sec]):
+						self.moments[sec](self)
+						self.moments[sec] = 'done'
+					elif callable(self.moments[sec]) and all([ callable(i) for i in self.moments[sec] ]):
+						for func in self.moments[sec]:
+							func(self)
+						self.moments[sec] = 'done'
+					else:
+						raise ValueError(
+f"'moments' constructor kwarg must be dict with integer keys and callable values or list of callable values ( functions must takes TimeLine argument )"
+							)
+
 
 		if parent_timeline.alive_time >= self.spawn_time:
 			if self.root:
@@ -156,6 +178,7 @@ class Window: # it is child window
 							self.root.destroy()
 
 						self.dead = True
+						self.alive_time += (time.time() - start_time) + 1/fps
 						return False
 
 					self.mouse_listener(cursor)
@@ -181,7 +204,7 @@ You must:
 							self.rhythm_index += 1
 							self.on_rhythm_index = 0
 
-						if self.on_rhythm_index > -1 and self.on_rhythm:
+						if self.on_rhythm_index > -1 and self.on_rhythm and self.is_rhythm_enabled:
 							self.command(self.on_rhythm[self.on_rhythm_index], rhythm=True)
 							self.on_rhythm_index += 1
 							if self.on_rhythm_index > len(self.on_rhythm)-1:
@@ -197,6 +220,8 @@ You must:
 					return False
 			else:
 				raise AttributeError(f'{self.adress}Child tkinter window "Window.root" did not configured')
+		
+		self.alive_time += (time.time() - start_time) + 1/fps
 		return True
 
 	def set_window(self, root: Union[Tk, Toplevel]):

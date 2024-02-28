@@ -56,9 +56,6 @@ class Area: # main window
 			self.media = None
 			self.media_label = None
 
-		#self.message_label = Label(self.root, text="", font=("Arial", 34), bg="black", fg="white")
-		#self.message_label.place(relx=0.5, y=0, anchor="center")
-
 		if cursor:
 			self.cursor = cursor
 			self.cursor.set_window( Toplevel(self.root) )
@@ -72,6 +69,8 @@ class Area: # main window
 
 		self.screen_width = self.root.winfo_screenwidth()
 		self.screen_height = self.root.winfo_screenheight()
+
+		self.hitbox = HitBox([0,0], [self.screen_width, self.screen_height])
 
 		self.canvas = Canvas(self.root, width=self.screen_width, height=self.screen_height, bg="black", highlightthickness=0)
 		self.canvas.pack()
@@ -194,6 +193,13 @@ class Area: # main window
 				self.on_death(self)
 			for timeline in self.timelines:
 				timeline.kill()
+
+			self.results = {
+				'fps': self.fps,
+				'pauses': self.pause_count,
+				'hp': self.cursor.hp,
+			}
+			print(self.results)
 			self.root.destroy()
 
 		timedelta = (time.time() - start_time)
@@ -356,7 +362,7 @@ class TimeLine: # it is a scene where contain child windows, you may use several
 						self.moments[sec] = 'done'
 					else:
 						raise ValueError(
-f"'moments' constructor kwarg must be dict with integer keys and callable values or list of callable values ( functions must takes TimeLine argument )"
+f"'moments' constructor kwarg must be dict with integer keys and callable values or list of callable values ( functions must takes Window argument )"
 							)
 
 			if self.alive_time >= self.wait_time:
@@ -385,13 +391,14 @@ f"'moments' constructor kwarg must be dict with integer keys and callable values
 
 class Cursor:
 	def __init__(self, hp: int = 1, hitbox: Union[HitBox, HitPolygon] = None, hitbox_show_color = None, on_death = None, show_mouse: bool = False,
-		image: Union[Image, str] = None, transparent_color: str = None, resize: List[[int, int]] = None, alpha: float = 1.0):
+		image: Union[Image, str] = None, transparent_color: str = None, resize: List[[int, int]] = None, alpha: float = 1.0, moments: dict = {}):
 		'''
 		radius: integer numbers, the "click zone" of cursor expands by this numbers in all directions. For example 1 gets rectangle 3x3 around cursor, 2 gets 5x5
 		image: string path to image or PIL.Image object, makes cursor with this image
 		transparent_color: string color name, like "black". If you indicated kwarg image, you can remove some color from it. If transparent_color="black" will be removed black color from image
 		resize: list with 2 integers. If you indicated kwarg image, you can resize cursor image
 		alpha: float from 0 to 1, it is cursor window alpha, level of transparency
+		moments: dict with integer key second and callable value ( value must takes Cursor ). At a given second will do callable
 		'''
 		if hp >= 0:
 			self.hp = hp
@@ -401,6 +408,9 @@ class Cursor:
 		self.on_death = on_death
 		self.dead = False
 		self.zero_hp = False
+
+		check_value(moments, dict, f"'moments' constructor kwarg must be dict with integer keys and callable values or list of callable values ( functions must takes TimeLine argument )")
+		self.moments = moments
 
 		check_value(show_mouse, [int, bool], exc_msg=f"'show_mouse' constructor kwarg must be bool, not {show_mouse} {type(show_mouse)}")
 		self.show_mouse = show_mouse
@@ -578,6 +588,21 @@ class Cursor:
 
 		if self.hp <= 0 and callable(self.on_death) and not self.dead:
 			self.on_death(self)
+
+		for sec in self.moments.keys():
+			if sec <= self.alive_time and self.moments[sec] != 'done':
+				if callable(self.moments[sec]):
+					self.moments[sec](self)
+					self.moments[sec] = 'done'
+				elif callable(self.moments[sec]) and all([ callable(i) for i in self.moments[sec] ]):
+					for func in self.moments[sec]:
+						func(self)
+					self.moments[sec] = 'done'
+				else:
+					raise ValueError(
+f"'moments' constructor kwarg must be dict with integer keys and callable values or list of callable values ( functions must takes TimeLine argument )"
+						)
+
 
 		if self.image:
 			window_x = mouse_x - self.image.size[0] // 2

@@ -229,7 +229,9 @@ class Media:
 				self.label.config(image=self.photo)
 
 	class Video:
-		def __init__(self, video_path: str, size: Union[list, tuple] = [], angle: int = 0, duration: int = 1, cycle: bool = True, preload: bool = True):
+		def __init__(self, video_path: str, size: Union[list, tuple] = [], angle: int = 0,
+			duration: int = 1, cycle: bool = True, preload: bool = True,
+			on_start: Callable = None, on_end: Callable = None):
 			check_value(cycle, [bool, int], f"'cycle' constructor kwarg must be bool, not {cycle} {type(cycle)})")
 			self.cycle = cycle
 
@@ -254,9 +256,20 @@ class Media:
 			else:
 				raise ValueError(f"'angle' constructor kwarg must be integer, not {angle} {type(angle)})")
 
+			if callable(on_start):
+				self.on_start = on_start
+			else:
+				self.on_start = None
+			if callable(on_end):
+				self.on_start = on_start
+			else:
+				self.on_start = None
+
 			self.photoes = None
 			self.label = None
 			self.update_count = 0
+			self.started = False
+			self.dead = False
 
 			check_value(duration, int, f"'duration' constructor kwarg must be integer > 0, not {duration} {type(duration)})")
 			if duration > 0:
@@ -282,7 +295,12 @@ class Media:
 				if self.angle:
 					frame = frame.rotate(self.angle)
 				return frame
+
 			except StopIteration:
+				if callable(self.on_end) and self.dead:
+					self.on_end(self)
+					self.dead = True
+
 				return None
 
 		def set_label(self, label: Label):
@@ -291,6 +309,10 @@ class Media:
 			self.label.config(image=self.photo)
 
 		def update(self, window, timeline, fps, cursor):
+			if callable(self.on_start) and not self.started:
+				self.on_start(self)
+				self.started = True
+
 			if self.duration > 1:
 				if self.update_count <= self.duration:
 					self.update_count += 1
