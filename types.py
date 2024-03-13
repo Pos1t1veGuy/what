@@ -1,10 +1,14 @@
 from typing import *
+
+import pyaudio
+import wave
 import imageio
 import itertools as it
 
 from tkinter import Label
 from PIL import Image, ImageTk
 from math import floor, sqrt
+from threading import Thread as th
 
 
 class Command:
@@ -110,6 +114,7 @@ class Command:
 
 
 class Media:
+# you can use it in Window media constructor kwarg to insect image or video into window
 	class Image:
 		def __init__(self, image: Union[str, Image], angle: int = 0,
 			size: Union[list, tuple] = [], resize_max: Union[list, tuple] = [], resize_min: Union[list, tuple] = []
@@ -662,3 +667,61 @@ class HitBox(HitPolygon):
 
 	def __repr__(self):
 		return f"HitBox({self.left_up}, {self.right_down})"
+
+
+class Sound:
+# you can use music and sounds: create object and play() or stop() it ( you can use it in another thread, make play(threading=True) )
+	def __init__(self, filepath: str):
+		self.filepath = filepath
+		self.wfile = wave.open(filepath, 'rb')
+		self.audio = pyaudio.PyAudio()
+
+		self.playing = False
+
+		self.audio_thread = th(target=self.audio_player, args=(1024,))
+
+	def play(self, chunk: int = 1024, threading=False):
+		if not threading:
+			self.audio_player(chunk)
+		else:
+			self.audio_thread = th(target=self.audio_player, args=(chunk,))
+			self.audio_thread.start()
+
+	def stop(self):
+		self.playing = False
+
+	def audio_player(self, chunk: int):
+		self.playing = True
+		self.stream = self.audio.open(
+			format=self.audio.get_format_from_width(self.wfile.getsampwidth()),
+			channels=self.wfile.getnchannels(),
+			rate=self.wfile.getframerate(),
+			output=True
+			)
+
+		self.data = True
+		while self.data and self.stream and self.playing:
+			self.step(chunk)
+
+		self.playing = False
+		self.stream.close()
+
+	def step(self, chunk: int):
+		self.data = self.wfile.readframes(chunk)
+		self.stream.write(self.data)
+
+	def close(self):
+		if self.stream:
+			self.stream.close()
+
+		self.wfile.close()
+		self.audio.terminate()
+
+	def __del__(self):
+		self.close()
+
+	def __str__(self):
+		return f'Sound(filepath="{self.filepath}", playing={self.playing})'
+
+	def __repr__(self):
+		return f'Sound(filepath="{self.filepath}")'

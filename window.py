@@ -12,7 +12,7 @@ from .movements import Movement
 class Window: # it is child window
 	def __init__(self, movements: Union[ List[Tuple[int, int]], list ], size: List[int], cycle: bool = False, repeat: int = -1,
 		always_on_top: bool = True, show_frame: bool = False, alpha: float = 1.0, transparent_color: str = None, bg_color: str = "black",
-		spawn_time: int = 0, alive_time: int = None, rhythm: int = None, on_rhythm: list = [], moments: dict = {},
+		spawn_time: int = 0, alive_time: int = None, rhythm: int = None, is_rhythm_enabled: bool = True, on_rhythm: list = [], moments: dict = {},
 		media: Media = None, media_label_args: list = [], media_label_kwargs: dict = {'relx': 0.5, 'rely': 0.5, 'anchor': 'center'},
 		hitbox: Union[HitBox, HitPolygon] = None, click_button: str = 'left', hitbox_show_color = None,
 		on_mouse_in_hitbox: list = [], on_mouse_hitbox_click: list = [], on_mouse_not_in_hitbox: list = [], on_mouse_not_in_hitbox_click: list = [],
@@ -84,7 +84,9 @@ class Window: # it is child window
 		else:
 			self.rhythm = None
 
-		self.is_rhythm_enabled = False
+		check_value(is_rhythm_enabled, [int, bool], exc_msg=f"'is_rhythm_enabled' constructor kwarg must be bool, not {is_rhythm_enabled} {type(is_rhythm_enabled)}")
+		self.is_rhythm_enabled = bool(is_rhythm_enabled)
+
 		self.alive_time = 0
 		self.position = [0,0]
 		self.media_label_kwargs = media_label_kwargs

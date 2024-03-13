@@ -1,6 +1,6 @@
 from what import *
 
-area = Area(cursor_circle_radius=10, show_mouse=False)
+area = Area(cursor_circle_radius=10, show_mouse=False, minimize_windows=False)
 
 
 m1 = Movement(quadratic_y(600, a=1500, step=5)[:int((600-200)/5)]).then(
