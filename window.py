@@ -5,16 +5,16 @@ import time
 from tkinter import Tk, Toplevel
 from tkinter import Label, Canvas
 
-from .types import check_value, Media, HitBox, HitPolygon, Segment
-from .movements import Movement
+from .types import check_value, Media
+from .geometry import HitBox, HitPolygon, HitCircle
 
 
 class Window: # it is child window
 	def __init__(self, movements: Union[ List[Tuple[int, int]], list ], size: List[int], cycle: bool = False, repeat: int = -1,
 		always_on_top: bool = True, show_frame: bool = False, alpha: float = 1.0, transparent_color: str = None, bg_color: str = "black",
-		spawn_time: int = 0, alive_time: int = None, rhythm: int = None, is_rhythm_enabled: bool = True, on_rhythm: list = [], moments: dict = {},
+		spawn_time: int = 0, alive_time: int = None, rhythm: Union[int, float] = None, is_rhythm_enabled: bool = True, on_rhythm: list = [], moments: dict = {},
 		media: Media = None, media_label_args: list = [], media_label_kwargs: dict = {'relx': 0.5, 'rely': 0.5, 'anchor': 'center'},
-		hitbox: Union[HitBox, HitPolygon] = None, click_button: str = 'left', hitbox_show_color = None,
+		hitbox: Union[HitBox, HitPolygon, HitCircle] = None, click_button: str = 'left', hitbox_show_color = None,
 		on_mouse_in_hitbox: list = [], on_mouse_hitbox_click: list = [], on_mouse_not_in_hitbox: list = [], on_mouse_not_in_hitbox_click: list = [],
 		on_click: list = [], bg_func: Callable = None):
 		'''
@@ -36,7 +36,7 @@ class Window: # it is child window
 		self.root = None # Window.root will be loaded after use Window.set_window(tkinter.TopLevel)
 		self.media = media
 
-		check_value(movements, [list, Movement], exc_msg=f"'movements' constructor kwarg must be list, not {movements} {type(movements)}")
+		check_value(movements, [list, tuple], exc_msg=f"'movements' constructor kwarg must be list, not {movements} {type(movements)}")
 		self.movements = movements
 
 		check_value(cycle, [bool, int], exc_msg=f"'cycle' constructor kwarg must be bool, not {cycle} {type(cycle)}")
@@ -48,39 +48,30 @@ class Window: # it is child window
 		else:
 			self.repeat = repeat-1
 
-		check_value(moments, dict, f"'moments' constructor kwarg must be dict with integer keys and callable values or list of callable values ( functions must takes TimeLine argument )")
+		check_value(moments, dict, exc_msg=f"'moments' constructor kwarg must be dict with integer keys and callable values or list of callable values ( functions must takes TimeLine argument )")
 		self.moments = moments
 
-		check_value(size, list, exc_msg=f"'size' constructor kwarg must be list of 2 integers > 0, not {size} {type(size)}")
-		if len(size) == 2:
-			if isinstance(size[0], int) and isinstance(size[1], int) and size[0] > 0 and size[1] > 0:
-				self.size = size
-			else:
-				raise ValueError(f"'size' constructor kwarg must be list of 2 integers > 0, not {size} {type(size)}")
+		check_value(size, [list, tuple], con=len(size) == 2,
+			exc_msg=f"'size' constructor kwarg must be list or tuple of 2 integers > 0, not {size} {type(size)}")
+		if isinstance(size[0], int) and isinstance(size[1], int) and size[0] > 0 and size[1] > 0:
+			self.size = size
 		else:
 			raise ValueError(f"'size' constructor kwarg must be list of 2 integers > 0, not {size} {type(size)}")
 
-		check_value(spawn_time, int, exc_msg=f"'spawn_time' constructor kwarg must be integer > 0, not {spawn_time} {type(spawn_time)}")
-		if spawn_time >= 0:
-			self.spawn_time = spawn_time
-		else:
-			raise ValueError(f"'spawn_time' constructor kwarg must be integer > 0, not {spawn_time} {type(spawn_time)}")
+		check_value(spawn_time, [int, float], con=spawn_time >= 0,
+			exc_msg=f"'spawn_time' constructor kwarg must be integer or float > 0, not {spawn_time} {type(spawn_time)}")
+		self.spawn_time = spawn_time
 
-		check_value(alive_time, [int, type(None)], exc_msg=f"Window 'alive_time' kwarg of constructor must be integer > 0, not {alive_time} {type(alive_time)}")
 		if alive_time != None:
-			if alive_time > 0:
-				self.max_alive_time = alive_time
-			else:
-				raise ValueError(f"'alive_time' constructor kwarg must be integer > 0, not {alive_time} {type(alive_time)}")
+			check_value(alive_time, [int, float], con=alive_time > 0,
+				exc_msg=f"Window 'alive_time' kwarg of constructor must be integer or float > 0, not {alive_time} {type(alive_time)}")
+			self.max_alive_time = alive_time
 		else:
 			self.max_alive_time = None
 
-		check_value(rhythm, [int, type(None)], exc_msg=f"'rhythm' constructor kwarg must be integer > 0, not {rhythm} {type(rhythm)}")
 		if rhythm:
-			if rhythm > 0:
-				self.rhythm = rhythm
-			else:
-				raise ValueError(f"'rhythm' constructor kwarg must be integer > 0, not {rhythm} {type(rhythm)}")
+			check_value(rhythm, [int, float], con=rhythm > 0, exc_msg=f"'rhythm' constructor kwarg must be integer or float > 0, not {rhythm} {type(rhythm)}")
+			self.rhythm = rhythm
 		else:
 			self.rhythm = None
 
@@ -158,18 +149,18 @@ class Window: # it is child window
 			self.parent_tl_name = parent_timeline.name
 
 		for sec in self.moments.keys():
-				if sec <= self.alive_time and self.moments[sec] != 'done':
-					if callable(self.moments[sec]):
-						self.moments[sec](self)
-						self.moments[sec] = 'done'
-					elif callable(self.moments[sec]) and all([ callable(i) for i in self.moments[sec] ]):
-						for func in self.moments[sec]:
-							func(self)
-						self.moments[sec] = 'done'
-					else:
-						raise ValueError(
+			if sec <= self.alive_time and self.moments[sec] != 'done':
+				if callable(self.moments[sec]):
+					self.moments[sec](self)
+					self.moments[sec] = 'done'
+				elif callable(self.moments[sec]) and all([ callable(i) for i in self.moments[sec] ]):
+					for func in self.moments[sec]:
+						func(self)
+					self.moments[sec] = 'done'
+				else:
+					raise ValueError(
 f"'moments' constructor kwarg must be dict with integer keys and callable values or list of callable values ( functions must takes TimeLine argument )"
-							)
+						)
 
 
 		if parent_timeline.alive_time >= self.spawn_time:
@@ -190,27 +181,7 @@ f"'moments' constructor kwarg must be dict with integer keys and callable values
 						self.alpha = self.default_alpha
 						del self.default_alpha
 
-					if self.rhythm != None:
-						if len(self.on_rhythm) / fps >= self.rhythm and not self.rhythm_animation_warning:
-							print(
-f'''WARNING: {self.adress}Your window has rhythm animation that lasts longer than its assigned execution time in Window constructor at kwarg 'rhythm'
-Window.rhythm = {self.rhythm}, but needs more than {round(len(self.on_rhythm) / fps, 2)}
-You must:
-1. Change rhythm kwarg in constructor or
-2. Use fewer commands in command list self.on_rhythm ( 'on_rhythm' at Window constructor ) or
-3. Increase fps at Area.run() kwarg 'fps' '''
-								)
-							self.rhythm_animation_warning = True
-
-						if self.alive_time >= self.rhythm_index * self.rhythm:
-							self.rhythm_index += 1
-							self.on_rhythm_index = 0
-
-						if self.on_rhythm_index > -1 and self.on_rhythm and self.is_rhythm_enabled:
-							self.command(self.on_rhythm[self.on_rhythm_index], rhythm=True)
-							self.on_rhythm_index += 1
-							if self.on_rhythm_index > len(self.on_rhythm)-1:
-								self.on_rhythm_index = -1
+					self.rhythm_step()
 
 					if hasattr(self.media, 'update'):
 						self.media.update(self, parent_timeline, fps, cursor)
@@ -288,7 +259,7 @@ f"{self.adress}Window.resize_window takes 2 arguments: integers > 0 or relaitive
 				self.command(self.on_click)
 
 			if self.hitbox and ( cursor.hitbox or cursor.position ):
-				if self.hitbox in cursor:
+				if cursor.hitbox in self.hitbox or cursor.position in self.hitbox:
 					if self.polygon_id != None:
 						self.canvas.itemconfig(self.polygon_id, fill=self.hitbox_show_color)
 
@@ -400,14 +371,14 @@ f"{self.adress}Invalid command at Window.on_rhythm[{self.on_rhythm_index}]: {sel
 				raise ValueError(f"{self.adress}Command.media.set takes a Media, not {args} {type(args)}")
 
 		elif cmd == 'wait':
-			check_value(args[0], [int, float],
+			if len(args) > 0:
+				check_value(args[0], [int, float], con=args[0] > 0 or args[0] == -1,
 exc_msg=f"{self.adress}Invalid string command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. Command.wait takes an integer or float > 0 ( or -1 if it should be endless )"
-				)
-			if args[0] > 0 or args[0] == -1:
+					)
 				self.pause = args[0]
 			else:
 				raise ValueError(
-f"{self.adress}Invalid string command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. Command.wait takes an integer or float > 0 ( or -1 if it should be endless )"
+					f"{self.adress}Invalid string command at Window.movements[{self.movement_index}]: {self.movements[self.movement_index]}. Command.wait takes an integer or float > 0 ( or -1 if it should be endless )"
 					)
 
 	def step(self):
@@ -443,6 +414,29 @@ f"{self.adress}Invalid string command at Window.movements[{self.movement_index}]
 			if self.alpha != .0:
 				self.root.attributes('-alpha', .0)
 				self.alpha = .0
+
+	def rhythm_step(self):
+		if self.rhythm != None and self.on_rhythm != None:
+			if len(self.on_rhythm) / fps >= self.rhythm and not self.rhythm_animation_warning:
+				print(
+f'''WARNING: {self.adress}Your window has rhythm animation that lasts longer than its assigned execution time in Window constructor at kwarg 'rhythm'
+Window.rhythm = {self.rhythm}, but needs more than {round(len(self.on_rhythm) / fps, 2)}
+You must:
+1. Change rhythm kwarg in constructor or
+2. Use fewer commands in command list self.on_rhythm ( 'on_rhythm' at Window constructor ) or
+3. Increase fps at Area.run() kwarg 'fps' '''
+					)
+				self.rhythm_animation_warning = True
+
+			if self.alive_time >= self.rhythm_index * self.rhythm:
+				self.rhythm_index += 1
+				self.on_rhythm_index = 0
+
+			if self.on_rhythm_index > -1 and self.on_rhythm and self.is_rhythm_enabled:
+				self.command(self.on_rhythm[self.on_rhythm_index], rhythm=True)
+				self.on_rhythm_index += 1
+				if self.on_rhythm_index > len(self.on_rhythm)-1:
+					self.on_rhythm_index = -1
 
 	def undo(self):
 		self.movement_index = 0
